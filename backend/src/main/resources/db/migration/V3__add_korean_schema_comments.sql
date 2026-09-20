@@ -1,0 +1,97 @@
+COMMENT ON TABLE application_metadata IS '애플리케이션 메타데이터';
+COMMENT ON COLUMN application_metadata.metadata_key IS '메타데이터 키';
+COMMENT ON COLUMN application_metadata.metadata_value IS '메타데이터 값';
+COMMENT ON COLUMN application_metadata.updated_at IS '수정 시각';
+
+COMMENT ON TABLE app_user IS '사용자';
+COMMENT ON COLUMN app_user.id IS '사용자 식별자';
+COMMENT ON COLUMN app_user.email IS '사용자 이메일';
+COMMENT ON COLUMN app_user.created_at IS '생성 시각';
+COMMENT ON COLUMN app_user.updated_at IS '수정 시각';
+
+COMMENT ON TABLE exchange_account IS '사용자 거래소 연동 계정';
+COMMENT ON COLUMN exchange_account.id IS '거래소 계정 식별자';
+COMMENT ON COLUMN exchange_account.user_id IS '사용자 식별자';
+COMMENT ON COLUMN exchange_account.exchange IS '거래소 구분';
+COMMENT ON COLUMN exchange_account.encrypted_access_key IS '암호화된 접근 키';
+COMMENT ON COLUMN exchange_account.encrypted_secret_key IS '암호화된 비밀 키';
+COMMENT ON COLUMN exchange_account.key_version IS '암호화 키 버전';
+COMMENT ON COLUMN exchange_account.enabled IS '연동 활성화 여부';
+COMMENT ON COLUMN exchange_account.created_at IS '생성 시각';
+COMMENT ON COLUMN exchange_account.updated_at IS '수정 시각';
+
+COMMENT ON TABLE asset_snapshot IS '사용자 자산 스냅샷';
+COMMENT ON COLUMN asset_snapshot.id IS '자산 스냅샷 식별자';
+COMMENT ON COLUMN asset_snapshot.user_id IS '사용자 식별자';
+COMMENT ON COLUMN asset_snapshot.exchange IS '거래소 구분';
+COMMENT ON COLUMN asset_snapshot.symbol IS '자산 심볼';
+COMMENT ON COLUMN asset_snapshot.quantity IS '보유 수량';
+COMMENT ON COLUMN asset_snapshot.average_buy_price IS '평균 매수 가격';
+COMMENT ON COLUMN asset_snapshot.current_price IS '현재 가격';
+COMMENT ON COLUMN asset_snapshot.evaluated_amount IS '평가 금액';
+COMMENT ON COLUMN asset_snapshot.captured_at IS '수집 시각';
+
+COMMENT ON TABLE market_candle IS '거래소 시장 캔들';
+COMMENT ON COLUMN market_candle.id IS '캔들 식별자';
+COMMENT ON COLUMN market_candle.exchange IS '거래소 구분';
+COMMENT ON COLUMN market_candle.market IS '거래 마켓';
+COMMENT ON COLUMN market_candle.candle_interval IS '캔들 시간 단위';
+COMMENT ON COLUMN market_candle.opened_at IS '캔들 시작 시각';
+COMMENT ON COLUMN market_candle.open_price IS '시가';
+COMMENT ON COLUMN market_candle.high_price IS '고가';
+COMMENT ON COLUMN market_candle.low_price IS '저가';
+COMMENT ON COLUMN market_candle.close_price IS '종가';
+COMMENT ON COLUMN market_candle.volume IS '거래량';
+
+COMMENT ON TABLE recommendation IS '투자 추천 결과';
+COMMENT ON COLUMN recommendation.id IS '추천 식별자';
+COMMENT ON COLUMN recommendation.user_id IS '사용자 식별자';
+COMMENT ON COLUMN recommendation.symbol IS '자산 심볼';
+COMMENT ON COLUMN recommendation.score IS '추천 점수';
+COMMENT ON COLUMN recommendation.signal IS '추천 신호';
+COMMENT ON COLUMN recommendation.target_weight IS '목표 비중';
+COMMENT ON COLUMN recommendation.reason IS '추천 근거';
+COMMENT ON COLUMN recommendation.generated_at IS '생성 시각';
+
+COMMENT ON TABLE order_plan IS '주문 계획';
+COMMENT ON COLUMN order_plan.id IS '주문 계획 식별자';
+COMMENT ON COLUMN order_plan.user_id IS '사용자 식별자';
+COMMENT ON COLUMN order_plan.exchange IS '거래소 구분';
+COMMENT ON COLUMN order_plan.symbol IS '자산 심볼';
+COMMENT ON COLUMN order_plan.side IS '주문 방향';
+COMMENT ON COLUMN order_plan.order_type IS '주문 유형';
+COMMENT ON COLUMN order_plan.requested_quantity IS '요청 수량';
+COMMENT ON COLUMN order_plan.requested_amount IS '요청 금액';
+COMMENT ON COLUMN order_plan.status IS '주문 계획 상태';
+COMMENT ON COLUMN order_plan.risk_reason IS '위험 검토 사유';
+COMMENT ON COLUMN order_plan.idempotency_key IS '멱등성 키';
+COMMENT ON COLUMN order_plan.created_at IS '생성 시각';
+
+COMMENT ON TABLE trade_order IS '거래 주문';
+COMMENT ON COLUMN trade_order.id IS '주문 식별자';
+COMMENT ON COLUMN trade_order.user_id IS '사용자 식별자';
+COMMENT ON COLUMN trade_order.order_plan_id IS '주문 계획 식별자';
+COMMENT ON COLUMN trade_order.exchange IS '거래소 구분';
+COMMENT ON COLUMN trade_order.trading_mode IS '거래 모드';
+COMMENT ON COLUMN trade_order.exchange_order_id IS '거래소 주문 식별자';
+COMMENT ON COLUMN trade_order.symbol IS '자산 심볼';
+COMMENT ON COLUMN trade_order.side IS '주문 방향';
+COMMENT ON COLUMN trade_order.order_type IS '주문 유형';
+COMMENT ON COLUMN trade_order.requested_quantity IS '요청 수량';
+COMMENT ON COLUMN trade_order.requested_amount IS '요청 금액';
+COMMENT ON COLUMN trade_order.executed_quantity IS '체결 수량';
+COMMENT ON COLUMN trade_order.executed_amount IS '체결 금액';
+COMMENT ON COLUMN trade_order.fee IS '수수료';
+COMMENT ON COLUMN trade_order.status IS '주문 상태';
+COMMENT ON COLUMN trade_order.idempotency_key IS '멱등성 키';
+COMMENT ON COLUMN trade_order.created_at IS '생성 시각';
+COMMENT ON COLUMN trade_order.completed_at IS '완료 시각';
+
+COMMENT ON TABLE audit_log IS '감사 로그';
+COMMENT ON COLUMN audit_log.id IS '감사 로그 식별자';
+COMMENT ON COLUMN audit_log.user_id IS '사용자 식별자';
+COMMENT ON COLUMN audit_log.event_type IS '이벤트 유형';
+COMMENT ON COLUMN audit_log.exchange IS '거래소 구분';
+COMMENT ON COLUMN audit_log.symbol IS '자산 심볼';
+COMMENT ON COLUMN audit_log.details IS '비밀정보가 제거된 이벤트 상세';
+COMMENT ON COLUMN audit_log.created_at IS '생성 시각';

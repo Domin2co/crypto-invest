@@ -1,0 +1,29 @@
+spring:
+  autoconfigure:
+    exclude: org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
+  application:
+    name: crypto-invest
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:crypto-invest}
+    username: ${POSTGRES_USER:crypto}
+    password: ${POSTGRES_PASSWORD}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+
+app:
+  auth-token-secret: ${AUTH_TOKEN_SECRET:}
+  cors-allowed-origin: ${CORS_ALLOWED_ORIGIN:http://localhost:5173}
+  paper-initial-krw: ${PAPER_INITIAL_KRW:1000000}
+  trading-mode: ${TRADING_MODE:PAPER}
+  live-trading-enabled: ${LIVE_TRADING_ENABLED:false}
+  credential-encryption-key: ${CREDENTIAL_ENCRYPTION_KEY:}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

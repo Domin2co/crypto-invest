@@ -1,0 +1,23 @@
+package com.cryptoinvest.security;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+/** 인증 토큰만 응답하며 비밀번호·거래소 API Key는 절대 응답하지 않는다. */
+@RestController
+@RequestMapping("/api/auth")
+public class AuthController {
+    private final AuthService authService;
+    public AuthController(AuthService authService) { this.authService = authService; }
+    @PostMapping("/register") public TokenResponse register(@Valid @RequestBody LoginRequest request) { return new TokenResponse(authService.register(request.email(), request.password())); }
+    @PostMapping("/login") public TokenResponse login(@Valid @RequestBody LoginRequest request) { return new TokenResponse(authService.login(request.email(), request.password())); }
+    public record LoginRequest(@Email @NotBlank @Size(max = 254) String email, @NotBlank @Size(min = 12, max = 128) String password) {}
+    public record TokenResponse(String accessToken) {}
+}
