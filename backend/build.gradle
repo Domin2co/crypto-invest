@@ -33,4 +33,15 @@ dependencies {
 
 tasks.named('test') {
     useJUnitPlatform()
+    exclude '**/*IT.class'
+}
+
+tasks.register('integrationTest', Test) {
+    description = 'Runs PostgreSQL-backed integration tests.'
+    group = 'verification'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform()
+    include '**/*IT.class'
+    shouldRunAfter tasks.test
 }

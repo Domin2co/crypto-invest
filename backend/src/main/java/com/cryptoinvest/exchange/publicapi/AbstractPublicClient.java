@@ -13,9 +13,13 @@ import java.time.Duration;
 public abstract class AbstractPublicClient {
     private static final Duration TIMEOUT = Duration.ofSeconds(5);
     protected final ObjectMapper objectMapper;
-    private final HttpClient httpClient = HttpClient.newBuilder().connectTimeout(TIMEOUT).build();
+    private final HttpClient httpClient;
+    private final Duration timeout;
 
-    protected AbstractPublicClient(ObjectMapper objectMapper) { this.objectMapper = objectMapper; }
+    protected AbstractPublicClient(ObjectMapper objectMapper) { this(objectMapper, HttpClient.newBuilder().connectTimeout(TIMEOUT).build(), TIMEOUT); }
+    protected AbstractPublicClient(ObjectMapper objectMapper, HttpClient httpClient, Duration timeout) {
+        this.objectMapper = objectMapper; this.httpClient = httpClient; this.timeout = timeout;
+    }
 
     /** 공개 API는 자동 재시도하지 않아 rate limit과 장애 중 요청 증폭을 피한다. */
     protected JsonNode get(String url) {
@@ -25,7 +29,7 @@ public abstract class AbstractPublicClient {
     /** 인증 header 값은 호출 직후 폐기하며 exception이나 log에 포함하지 않는다. */
     protected JsonNode get(String url, String bearerToken) {
         try {
-            HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(url)).timeout(TIMEOUT).header("Accept", "application/json").GET();
+            HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(url)).timeout(timeout).header("Accept", "application/json").GET();
             if (bearerToken != null) request.header("Authorization", bearerToken);
             HttpResponse<String> response = httpClient.send(request.build(), HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() < 200 || response.statusCode() >= 300) {

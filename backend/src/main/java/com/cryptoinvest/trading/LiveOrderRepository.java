@@ -1,0 +1,60 @@
+package com.cryptoinvest.trading;
+
+import com.cryptoinvest.exchange.Exchange;
+import java.math.BigDecimal;
+import java.util.Optional;
+import java.util.UUID;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Repository;
+
+/** 실주문은 먼저 SUBMITTED 후보를 저장해 process 재시작 뒤에도 재전송하지 않게 한다. */
+@Repository
+public class LiveOrderRepository {
+    private final JdbcTemplate jdbcTemplate;
+    public LiveOrderRepository(JdbcTemplate jdbcTemplate) { this.jdbcTemplate = jdbcTemplate; }
+
+    public Optional<LiveOrder> findByIdempotencyKey(String idempotencyKey) {
+        return jdbcTemplate.query("""
+                SELECT id, exchange, client_order_id, exchange_order_id, status, executed_quantity, executed_amount, fee
+                FROM trade_order WHERE trading_mode = 'LIVE' AND idempotency_key = ?
+                """, rs -> rs.next() ? Optional.of(row(rs)) : Optional.empty(), idempotencyKey);
+    }
+
+    public BigDecimal submittedAmountToday(UUID userId) {
+        BigDecimal result = jdbcTemplate.queryForObject("""
+                SELECT COALESCE(SUM(requested_amount), 0) FROM trade_order
+                WHERE user_id = ? AND trading_mode = 'LIVE' AND created_at >= CURRENT_DATE
+                AND status IN ('SUBMITTED', 'PARTIALLY_FILLED', 'FILLED', 'UNKNOWN')
+                """, BigDecimal.class, userId);
+        return result == null ? BigDecimal.ZERO : result;
+    }
+
+    public LiveOrder createSubmitted(UUID orderPlanId, OrderPlan plan, BigDecimal quantity, String clientOrderId) {
+        UUID id = UUID.randomUUID();
+        jdbcTemplate.update("""
+                INSERT INTO trade_order (id, user_id, order_plan_id, exchange, trading_mode, client_order_id, symbol, side,
+                order_type, requested_quantity, requested_amount, status, idempotency_key)
+                VALUES (?, ?, ?, ?, 'LIVE', ?, ?, ?, 'MARKET', ?, ?, 'SUBMITTED', ?)
+                """, id, plan.userId(), orderPlanId, plan.exchange().name(), clientOrderId, plan.symbol(), plan.side(),
+                quantity, plan.amount(), plan.idempotencyKey());
+        jdbcTemplate.update("INSERT INTO audit_log (id, user_id, event_type, exchange, symbol, details) VALUES (?, ?, 'LIVE_ORDER_SUBMISSION_STARTED', ?, ?, '{}'::jsonb)",
+                UUID.randomUUID(), plan.userId(), plan.exchange().name(), plan.symbol());
+        return new LiveOrder(id, plan.exchange(), clientOrderId, null, "SUBMITTED", BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);
+    }
+
+    public LiveOrder update(LiveOrder previous, LiveOrder result) {
+        boolean complete = "FILLED".equals(result.status()) || "CANCELLED".equals(result.status()) || "FAILED".equals(result.status());
+        jdbcTemplate.update("""
+                UPDATE trade_order SET exchange_order_id = ?, status = ?, executed_quantity = ?, executed_amount = ?, fee = ?,
+                completed_at = CASE WHEN ? THEN CURRENT_TIMESTAMP ELSE completed_at END WHERE id = ?
+                """, result.exchangeOrderId(), result.status(), result.executedQuantity(), result.executedAmount(), result.fee(), complete, previous.id());
+        return new LiveOrder(previous.id(), previous.exchange(), previous.clientOrderId(), result.exchangeOrderId(), result.status(),
+                result.executedQuantity(), result.executedAmount(), result.fee());
+    }
+
+    private static LiveOrder row(java.sql.ResultSet rs) throws java.sql.SQLException {
+        return new LiveOrder(rs.getObject("id", UUID.class), Exchange.valueOf(rs.getString("exchange")), rs.getString("client_order_id"),
+                rs.getString("exchange_order_id"), rs.getString("status"), rs.getBigDecimal("executed_quantity"),
+                rs.getBigDecimal("executed_amount"), rs.getBigDecimal("fee"));
+    }
+}

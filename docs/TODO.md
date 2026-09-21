@@ -6,6 +6,7 @@
 - 기본 거래 모드는 `PAPER`이며 Phase 13 전에는 실거래 주문을 구현·실행하지 않는다.
 - 새 테이블 또는 컬럼을 추가할 때는 같은 Flyway migration에 한글 `COMMENT`를 추가한다.
 - 기존 migration은 수정하지 않고 새 `V{n}__*.sql` migration을 추가한다.
+- 개인정보·시큐어코딩·추천 투명성·접근성·운영 기준은 `AGENTS.md`와 신규 운영 문서를 상시 적용한다.
 
 ## 완료
 
@@ -89,21 +90,28 @@
 ### Phase 12 — E2E / Security Hardening
 
 - [x] 인증·인가, 사용자별 credential/portfolio/order 격리 (Bearer 토큰·BCrypt·소유자 ID 저장 경로)
-- [ ] XSS, CSRF, SQL injection, CORS 검토
-- [ ] secret/Authorization header logging 차단
-- [ ] timeout recovery, HTTP 429/500, malformed response, insufficient balance
-- [ ] Mock/PAPER E2E
-- [ ] PostgreSQL Flyway·repository 통합 테스트
-- [ ] backend/frontend API 통합 테스트
+- [x] XSS, CSRF, SQL injection, CORS 검토 (React 기본 escaping·입력 검증·JDBC bind parameter·stateless bearer 및 허용/차단 CORS 통합 테스트)
+- [x] secret/Authorization header logging 차단 (request detail·Tomcat access log 비활성화, Bearer filter 무로그 확인)
+- [x] timeout recovery, HTTP 429/500, malformed response, insufficient balance (읽기 API 재시도 금지·timeout/오류 단위 테스트, PAPER 잔고 거절 테스트)
+- [x] Mock/PAPER E2E (PAPER UI·credential 미노출·공개 시세 E2E 완료)
+- [x] PostgreSQL Flyway·repository 통합 테스트 (rollback 격리된 실제 DB 검증 완료)
+- [x] backend/frontend API 통합 테스트 (Vite `/api` proxy·실제 공개 시세 runtime/E2E 완료)
 
 ### Phase 13 — Live Trading
 
 > Phase 12 검증 완료 뒤에만 착수한다.
 
-- [ ] LiveTradingGuard
-- [ ] Live order adapter 및 주문 상태 확인
-- [ ] timeout recovery: 기존 주문 조회 후 안전할 때만 후속 처리
-- [ ] 실거래 권한·일일/종목 제한·kill switch·audit log
+- [x] LiveTradingGuard (PAPER 기본값·LIVE 이중 스위치·일일 한도·RiskEngine 차단 단위 테스트)
+- [x] Live order adapter 및 주문 상태 확인 (Upbit/Bithumb client order ID·서명·상태 변환 단위 테스트, controller 미노출)
+- [x] timeout recovery: 기존 주문 조회 후 안전할 때만 후속 처리 (재전송 없이 client order ID 조회 단위 테스트)
+- [ ] 실거래 권한·일일/종목 제한·kill switch·audit log (일일/자산비중/kill switch 구현, 사용자 재확인·운영 승인·실환경 검증 대기)
+
+## 상시 준수 항목
+
+- [x] 개인정보처리방침 초안·필수/선택 동의·동의 이력·본인 열람/마케팅 철회/계정 삭제 API
+- [x] 시큐어코딩·추천 투명성·접근성/UX·운영/사고대응·테스트 피드백 문서 및 AGENTS 규칙
+- [x] frontend 가입 동의/개인정보 권리 화면과 모바일/키보드 E2E (토큰 메모리 보관·320px 메뉴·실제 가입/마케팅 철회 E2E)
+- [ ] 공개·유료·타인 자동매매 출시 전 법무·개인정보·보안·운영 게이트 서면 승인
 
 ## 보류
 
@@ -125,3 +133,5 @@ Phase 13 완료 보고 전까지는 작업을 막는 경우가 아니면 별도 
 - [ ] Bithumb API key 발급: 자산 조회·주문 조회·주문만 필요한 최소 권한, 출금 권한 금지
 - [ ] 사용자별 API key 등록: Phase 12 인증 UI/API가 준비된 뒤에만 수행, `.env` 공용 key로 대체 금지
 - [ ] LIVE 전환 승인: Phase 13의 별도 안전 점검·kill switch·한도 검증 후에만 검토
+- [ ] 개인정보처리방침 게시 정보 확정: 사업자/개인정보 보호책임자/연락처/보유기간/위탁·국외이전 여부를 법률 검토로 확정
+- [ ] 공개·유료·타인 자동매매 법률 검토: 인허가·신고·약관·광고·환불·소비자보호 적용성을 전문가에게 서면 확인

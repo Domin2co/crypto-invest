@@ -18,6 +18,12 @@ public class BearerTokenFilter extends OncePerRequestFilter {
     private final AppTokenService tokenService;
     public BearerTokenFilter(AppTokenService tokenService) { this.tokenService = tokenService; }
 
+    /** 공개 endpoint에는 전달 경로의 불필요한 Authorization 값이 가입·공개시세를 막지 않게 한다. */
+    @Override protected boolean shouldNotFilter(HttpServletRequest request) {
+        String path = request.getServletPath();
+        return path.startsWith("/api/auth/") || path.startsWith("/api/markets/") || path.equals("/api/health") || path.equals("/actuator/health");
+    }
+
     @Override protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain) throws ServletException, IOException {
         String header = request.getHeader(HttpHeaders.AUTHORIZATION);
         if (header != null && !header.isBlank()) {

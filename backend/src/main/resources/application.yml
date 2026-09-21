@@ -13,14 +13,25 @@ spring:
     open-in-view: false
   flyway:
     enabled: true
+  mvc:
+    log-request-details: false
+
+server:
+  tomcat:
+    accesslog:
+      enabled: false
 
 app:
   auth-token-secret: ${AUTH_TOKEN_SECRET:}
-  cors-allowed-origin: ${CORS_ALLOWED_ORIGIN:http://localhost:5173}
+  cors-allowed-origin: ${CORS_ALLOWED_ORIGIN:http://localhost:5173,http://127.0.0.1:5173}
   paper-initial-krw: ${PAPER_INITIAL_KRW:1000000}
   trading-mode: ${TRADING_MODE:PAPER}
   live-trading-enabled: ${LIVE_TRADING_ENABLED:false}
+  live-daily-limit: ${LIVE_DAILY_LIMIT:0}
+  upbit-api-base-url: ${UPBIT_API_BASE_URL:https://api.upbit.com}
+  bithumb-api-base-url: ${BITHUMB_API_BASE_URL:https://api.bithumb.com}
   credential-encryption-key: ${CREDENTIAL_ENCRYPTION_KEY:}
+  privacy-policy-version: ${PRIVACY_POLICY_VERSION:2026-09-21}
 
 management:
   endpoints:
