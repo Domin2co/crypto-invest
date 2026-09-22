@@ -3,6 +3,8 @@ package com.cryptoinvest.exchange.credential;
 import com.cryptoinvest.exchange.Exchange;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
@@ -22,5 +24,7 @@ public class ExchangeAccountController {
     public void save(Authentication authentication, @Valid @RequestBody SaveAccountRequest request) {
         credentials.save((UUID) authentication.getPrincipal(), request.exchange(), new ExchangeCredentials(request.accessKey(), request.secretKey()));
     }
-    public record SaveAccountRequest(Exchange exchange, @NotBlank String accessKey, @NotBlank String secretKey) {}
+    /** 원문은 암호화 오버헤드를 고려해 DB 암호문 컬럼보다 짧게 제한한다. */
+    public record SaveAccountRequest(@NotNull Exchange exchange, @NotBlank @Size(max = 512) String accessKey,
+            @NotBlank @Size(max = 512) String secretKey) {}
 }

@@ -21,10 +21,11 @@ public class LiveTradingService {
     private final LiveOrderRepository orders;
     private final ExchangeAccountCredentialService credentials;
     private final LiveOrderClient client;
+    private final LiveTradingConfirmationService confirmations;
 
     public LiveTradingService(LiveTradingGuard guard, LiveOrderRepository orders,
-            ExchangeAccountCredentialService credentials, LiveOrderClient client) {
-        this.guard = guard; this.orders = orders; this.credentials = credentials; this.client = client;
+            ExchangeAccountCredentialService credentials, LiveOrderClient client, LiveTradingConfirmationService confirmations) {
+        this.guard = guard; this.orders = orders; this.credentials = credentials; this.client = client; this.confirmations = confirmations;
     }
 
     @Transactional
@@ -34,6 +35,7 @@ public class LiveTradingService {
             return existing.get().status().equals("UNKNOWN") ? recover(existing.get(), enabledCredentials(plan)) : existing.get();
         }
 
+        confirmations.requireActive(plan.userId());
         guard.requireAllowed(plan, policy, orders.submittedAmountToday(plan.userId()));
         ExchangeCredentials account = enabledCredentials(plan);
         String clientOrderId = clientOrderId(plan.idempotencyKey());

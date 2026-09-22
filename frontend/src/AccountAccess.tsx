@@ -3,9 +3,10 @@ import type { FormEvent } from 'react'
 
 type Consent = { type: string; policyVersion: string; grantedAt: string; withdrawnAt: string | null }
 type PrivacyExport = { email: string; consents: Consent[] }
+type Props = { onTokenChange: (token: string | null) => void }
 
-/** 토큰은 브라우저 저장소에 쓰지 않고, 가입·권리 요청이 끝나는 동안만 메모리에 둔다. */
-export default function AccountAccess() {
+/** 토큰은 브라우저 저장소에 보관하지 않고, 현재 화면의 인증 요청에만 사용한다. */
+export default function AccountAccess({ onTokenChange }: Props) {
   const [token, setToken] = useState<string | null>(null)
   const [privacy, setPrivacy] = useState<PrivacyExport | null>(null)
   const [message, setMessage] = useState('')
@@ -27,7 +28,8 @@ export default function AccountAccess() {
       }) })
       if (!response.ok) throw new Error('register')
       const accessToken = (await response.json() as { accessToken: string }).accessToken
-      formElement.reset(); setToken(accessToken); await loadPrivacy(accessToken); setMessage('가입과 필수 개인정보 처리 동의가 완료되었습니다.')
+      formElement.reset(); setToken(accessToken); onTokenChange(accessToken); await loadPrivacy(accessToken)
+      setMessage('가입과 필수 개인정보 처리 동의가 완료되었습니다.')
     } catch { setMessage('가입을 완료하지 못했습니다. 입력값과 네트워크를 확인해 주세요.') } finally { setBusy(false) }
   }
 
@@ -42,12 +44,12 @@ export default function AccountAccess() {
   }
 
   async function deleteAccount() {
-    if (!token || !window.confirm('계정을 삭제하면 거래소 API key가 삭제되고 로그인할 수 없습니다. 계속할까요?')) return
+    if (!token || !window.confirm('계정을 삭제하면 거래소 API 키가 삭제되고 로그아웃됩니다. 계속할까요?')) return
     setBusy(true); setMessage('')
     try {
       const response = await fetch('/api/privacy/me', { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } })
       if (!response.ok) throw new Error('delete')
-      setToken(null); setPrivacy(null); setMessage('계정을 삭제했습니다.')
+      setToken(null); onTokenChange(null); setPrivacy(null); setMessage('계정이 삭제되었습니다.')
     } catch { setMessage('계정을 삭제하지 못했습니다.') } finally { setBusy(false) }
   }
 

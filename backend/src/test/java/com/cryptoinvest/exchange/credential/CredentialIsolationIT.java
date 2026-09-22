@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -72,5 +73,23 @@ class CredentialIsolationIT {
         Map<String, Object> stored = jdbcTemplate.queryForMap("SELECT encrypted_access_key, encrypted_secret_key FROM exchange_account WHERE user_id = (SELECT id FROM app_user WHERE email = ?)", email);
         assertThat(stored.get("encrypted_access_key")).isNotEqualTo("test-access");
         assertThat(stored.get("encrypted_secret_key")).isNotEqualTo("test-secret");
+    }
+
+    @Test
+    void rejectsMissingExchangeAndOversizedCredentialWithoutSavingIt() throws Exception {
+        String email = "invalid-api-" + UUID.randomUUID() + "@example.com";
+        var registration = mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("email", email, "password", "long-enough-password", "privacyAccepted", true, "marketingAccepted", false))))
+                .andExpect(status().isOk()).andReturn();
+        String token = objectMapper.readTree(registration.getResponse().getContentAsString()).path("accessToken").asText();
+
+        mockMvc.perform(post("/api/exchange-accounts").header("Authorization", "Bearer " + token).contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("accessKey", "access", "secretKey", "secret"))))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
+        mockMvc.perform(post("/api/exchange-accounts").header("Authorization", "Bearer " + token).contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("exchange", "UPBIT", "accessKey", "a".repeat(513), "secretKey", "secret"))))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM exchange_account WHERE user_id = (SELECT id FROM app_user WHERE email = ?)", Integer.class, email)).isZero();
     }
 }

@@ -115,3 +115,17 @@ Mock은 최소한 다음 Scenario를 지원한다.
 - HTTP 500
 - 중복 주문
 - Partial Fill
+
+---
+
+## 10. 공개 추천 조회
+
+`GET /api/recommendations/{exchange}?market=KRW-BTC`는 공개 일봉 15개를 시간순으로 정렬해 RSI,
+1일 Momentum, 가격 대비 변동성을 계산한다. 응답은 추천 결과와 생성/데이터 시각, 출처, 표본 수,
+지표, 한계를 함께 반환하며 주문 API나 사용자 API key를 사용하지 않는다.
+
+`GET /api/portfolio/{exchange}`는 인증된 사용자 본인의 읽기 전용 잔고와 공개 현재가를 사용해 총 평가액,
+현금 비중, 종목별 평가액·비중을 반환한다. 자격증명·주문 기능은 응답에 포함하거나 호출하지 않는다.
+
+`PUT /api/portfolio/{exchange}/targets`는 인증된 본인의 통화별 목표 비중만 저장한다. 각 비중은 0~1,
+전체 합계는 1 이하여야 하며 저장 후 조회 결과의 rebalancing gap은 `목표 비중 - 현재 비중`으로 계산한다.

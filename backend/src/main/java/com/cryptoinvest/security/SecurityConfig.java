@@ -27,7 +27,7 @@ public class SecurityConfig {
     @Bean SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         return http.csrf(csrf -> csrf.disable()).cors(Customizer.withDefaults())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .authorizeHttpRequests(auth -> auth.requestMatchers("/actuator/health", "/api/health", "/api/auth/**", "/api/markets/**").permitAll().anyRequest().authenticated())
+                .authorizeHttpRequests(auth -> auth.requestMatchers("/actuator/health", "/api/health", "/api/auth/**", "/api/markets/**", "/api/recommendations/**").permitAll().anyRequest().authenticated())
                 .exceptionHandling(errors -> errors.authenticationEntryPoint((request, response, exception) -> response.sendError(401)))
                 .addFilterBefore(bearerTokenFilter, UsernamePasswordAuthenticationFilter.class).build();
     }

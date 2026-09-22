@@ -1,6 +1,7 @@
 package com.cryptoinvest.security;
 
 import java.util.List;
+import java.time.OffsetDateTime;
 import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -21,6 +22,17 @@ public class UserConsentRepository {
     }
     public void withdraw(UUID userId, String type) {
         jdbcTemplate.update("UPDATE user_consent SET withdrawn_at = CURRENT_TIMESTAMP WHERE user_id = ? AND consent_type = ?", userId, type);
+    }
+    public boolean hasActive(UUID userId, String type, OffsetDateTime since) {
+        return Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
+                SELECT EXISTS (SELECT 1 FROM user_consent
+                WHERE user_id = ? AND consent_type = ? AND withdrawn_at IS NULL AND granted_at >= ?)
+                """, Boolean.class, userId, type, since));
+    }
+    public void recordLiveTradingConfirmation(UUID userId, String policyVersion) {
+        grant(userId, "LIVE_TRADING", policyVersion);
+        jdbcTemplate.update("INSERT INTO audit_log (id, user_id, event_type, details) VALUES (?, ?, 'LIVE_TRADING_CONFIRMED', '{}'::jsonb)",
+                UUID.randomUUID(), userId);
     }
     public List<Consent> findByUserId(UUID userId) {
         return jdbcTemplate.query("SELECT consent_type, policy_version, granted_at, withdrawn_at FROM user_consent WHERE user_id = ? ORDER BY consent_type",

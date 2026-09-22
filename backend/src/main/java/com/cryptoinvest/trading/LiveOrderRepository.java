@@ -48,6 +48,11 @@ public class LiveOrderRepository {
                 UPDATE trade_order SET exchange_order_id = ?, status = ?, executed_quantity = ?, executed_amount = ?, fee = ?,
                 completed_at = CASE WHEN ? THEN CURRENT_TIMESTAMP ELSE completed_at END WHERE id = ?
                 """, result.exchangeOrderId(), result.status(), result.executedQuantity(), result.executedAmount(), result.fee(), complete, previous.id());
+        jdbcTemplate.update("""
+                INSERT INTO audit_log (id, user_id, event_type, exchange, symbol, details)
+                SELECT ?, user_id, 'LIVE_ORDER_STATUS_UPDATED', exchange, symbol, jsonb_build_object('status', ?)
+                FROM trade_order WHERE id = ?
+                """, UUID.randomUUID(), result.status(), previous.id());
         return new LiveOrder(previous.id(), previous.exchange(), previous.clientOrderId(), result.exchangeOrderId(), result.status(),
                 result.executedQuantity(), result.executedAmount(), result.fee());
     }

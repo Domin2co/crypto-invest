@@ -131,6 +131,9 @@ Bug Reproduction
 
 가능하면 테스트 이후 실제 시스템을 실행한다.
 
+테스트·검증에 필요한 로컬 Backend/Frontend와 프로젝트 Docker Compose 서비스는 별도 확인 없이 기동·중지할 수 있으며,
+최종 결과에는 실행 상태와 보완점을 기록한다.
+
 ```powershell
 docker compose up -d
 docker compose ps

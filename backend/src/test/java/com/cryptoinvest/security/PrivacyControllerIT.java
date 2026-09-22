@@ -44,14 +44,44 @@ class PrivacyControllerIT {
                         .content(objectMapper.writeValueAsString(Map.of("email", email, "password", "long-enough-password", "privacyAccepted", true, "marketingAccepted", true))))
                 .andExpect(status().isOk()).andReturn();
         String token = objectMapper.readTree(registration.getResponse().getContentAsString()).path("accessToken").asText();
+        UUID userId = jdbcTemplate.queryForObject("SELECT id FROM app_user WHERE email = ?", UUID.class, email);
 
         mockMvc.perform(get("/api/privacy/me").header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.email").value(email))
                 .andExpect(jsonPath("$.consents.length()").value(2));
+        mockMvc.perform(post("/api/paper/orders").header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsString(Map.of(
+                                "exchange", "UPBIT", "symbol", "BTC", "side", "BUY", "amount", 10000,
+                                "price", 100000, "idempotencyKey", "paper-" + UUID.randomUUID()))))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.status").value("FILLED"));
+        org.assertj.core.api.Assertions.assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM trade_order WHERE user_id = ? AND trading_mode = 'PAPER'", Integer.class,
+                userId)).isEqualTo(1);
+        mockMvc.perform(get("/api/paper/orders/summary").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.wallets.length()").value(2))
+                .andExpect(jsonPath("$.orders.length()").value(1));
+        mockMvc.perform(post("/api/paper/orders").header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsString(Map.of(
+                                "exchange", "UPBIT", "symbol", "BTC", "side", "BUY", "amount", 1000000,
+                                "price", 100000, "idempotencyKey", "insufficient-" + UUID.randomUUID()))))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("INVALID_STATE"));
+        org.assertj.core.api.Assertions.assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM trade_order WHERE user_id = ? AND trading_mode = 'PAPER'", Integer.class,
+                userId)).isEqualTo(1);
         mockMvc.perform(patch("/api/privacy/marketing-consent").header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON).content("{\"accepted\":false}"))
                 .andExpect(status().isNoContent());
+        mockMvc.perform(post("/api/live-trading/confirm").header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"accepted\":false}"))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(post("/api/live-trading/confirm").header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"accepted\":true}"))
+                .andExpect(status().isNoContent());
+        org.assertj.core.api.Assertions.assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM audit_log WHERE event_type = 'LIVE_TRADING_CONFIRMED'", Integer.class)).isEqualTo(1);
+        jdbcTemplate.update("INSERT INTO portfolio_target (user_id, exchange, currency, target_weight) VALUES (?, 'UPBIT', 'BTC', 0.35)", userId);
         mockMvc.perform(delete("/api/privacy/me").header("Authorization", "Bearer " + token)).andExpect(status().isNoContent());
         org.assertj.core.api.Assertions.assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM app_user WHERE email = ?", Integer.class, email)).isZero();
+        org.assertj.core.api.Assertions.assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM portfolio_target WHERE user_id = ?", Integer.class, userId)).isZero();
     }
 }

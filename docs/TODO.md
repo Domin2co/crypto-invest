@@ -1,5 +1,18 @@
 # TODO.md
 
+## 2026-09-22 Phase 13 보완
+
+- [x] 기존 `user_consent`에 `LIVE_TRADING` 재확인 유형 추가(Flyway V8, 모든 변경 컬럼 comment 유지)
+- [x] 재확인 API, 15분 유효시간 검증, `LIVE_TRADING_CONFIRMED` 및 주문 상태 감사 이력
+- [x] 재확인 누락 시 RiskEngine·복호화·거래소 호출 이전에 거절하는 단위 테스트
+- [ ] 운영 승인, 실제 거래소 권한/주문 상태 조회 검증 및 법무 출시 게이트는 수동 처리 항목으로 유지
+
+## 2026-09-22 Phase 9 PAPER 거래 E2E 보완
+
+- [x] 인증된 사용자 PAPER 주문 API와 사용자별 주문 계획·지갑·감사 이력 연결
+- [x] PAPER 매수·매도 UI (모의 체결 가격 명시, 실제 거래소 주문/API key 미사용)
+- [x] 가입 후 PAPER 매수·매도 체결(HTTP 201) Browser E2E 및 320px 접근성 회귀 검증
+
 ## 운영 원칙
 
 - Phase는 아래 순서로만 진행하고, 완료된 Phase는 테스트·runtime 결과를 기록한다.
@@ -75,16 +88,19 @@
 - [x] In-memory idempotency
 - [x] DB order history 및 audit log (사용자별 가상 지갑 transaction 연동, 단위·런타임 검증 완료)
 - [x] paper order/audit repository 단위 테스트
-- [ ] Paper Trading E2E
+- [x] Paper Trading E2E (가입 후 사용자별 PAPER 매수·매도 HTTP 201, 실제 거래소 주문 미호출)
 
 ### Phase 10 — Auto Investment
 
 - [x] `REBALANCE_ALL`, `KEEP_EXISTING_ASSETS`, `CASH_ONLY` (단위 테스트 완료)
 - [x] 기존 OrderPlanner → RiskEngine → TradingService 경로 재사용 (PAPER 체결 경로 단위 테스트 완료)
 
-### Phase 11 — Frontend Dashboard
+### Phase 11 — Frontend Dashboard (보완 진행 중)
 
-- [x] Dashboard, portfolio, market, recommendation, trading 화면 (연동 전 읽기 전용 UX)
+- [x] Dashboard, 시장 시세, PAPER 거래·주문 내역 화면
+- [x] 공개 일봉 기반 추천 API 연동 및 데이터 시각·출처·지표·한계 표시
+- [x] 사용자 연동 계정의 실제 읽기 전용 포트폴리오(총 평가·현금/종목 비중) 표시
+- [x] 사용자별 목표 비중 정책 저장 및 rebalancing gap 표시(Flyway V9, 모든 테이블·컬럼 한글 comment)
 - [x] API key 미노출·PAPER mode 표시
 
 ### Phase 12 — E2E / Security Hardening

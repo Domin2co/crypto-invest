@@ -1,5 +1,10 @@
 # SECURITY.md
 
+## 실거래 사용자 재확인
+
+새 LIVE 주문은 최근 사용자 재확인이 없으면 거절한다. 재확인 API는 주문을 생성하지 않고 동의 이력과
+`LIVE_TRADING_CONFIRMED` 감사 이벤트만 기록한다. 기본 유효시간은 15분이며 `LIVE_TRADING_CONFIRMATION_MINUTES`로 조정한다.
+
 ## 1. 기본 원칙
 
 이 프로젝트는 거래소 API Key와 실제 자산을 다룰 수 있으므로 일반 웹 프로젝트보다 보수적인 보안 정책을 적용한다.

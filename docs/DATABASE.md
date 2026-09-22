@@ -1,5 +1,10 @@
 # DATABASE.md
 
+## 실거래 재확인 이력
+
+`user_consent.consent_type`은 `PRIVACY`, `MARKETING`, `LIVE_TRADING`을 허용한다. 실거래 재확인은
+기존 동의 이력과 `audit_log`를 함께 사용하므로 별도 테이블을 만들지 않는다.
+
 ## 1. DB
 
 기본 DB:
@@ -94,6 +99,23 @@ spring:
 - symbol
 - details
 - created_at
+
+### user_consent
+
+- consent_type: 개인정보·마케팅·실거래 재확인
+- policy_version
+- granted_at
+- withdrawn_at
+
+### portfolio_target
+
+- user_id
+- exchange
+- currency
+- target_weight
+- updated_at
+
+사용자별 목표 비중 정책이다. 동일 사용자·거래소·통화는 하나만 저장하며, 계정 삭제 시 함께 삭제한다.
 
 ---
 

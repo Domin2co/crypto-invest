@@ -23,6 +23,7 @@ public class UserAuthRepository {
     }
     /** 계정 삭제 요청은 로그인·API key 접근을 차단하고 직접 식별 정보를 익명화한다. */
     public void anonymizeAndDisable(UUID userId) {
+        jdbcTemplate.update("DELETE FROM portfolio_target WHERE user_id = ?", userId);
         jdbcTemplate.update("DELETE FROM exchange_account WHERE user_id = ?", userId);
         jdbcTemplate.update("UPDATE app_user SET email = ?, password_hash = 'DELETED', enabled = FALSE, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
                 "deleted-" + userId + "@deleted.invalid", userId);

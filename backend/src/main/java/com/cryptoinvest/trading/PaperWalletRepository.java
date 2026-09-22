@@ -1,6 +1,7 @@
 package com.cryptoinvest.trading;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -45,4 +46,11 @@ public class PaperWalletRepository {
                 """, amount, userId, currency, amount);
         if (changed == 0) throw new IllegalStateException("Insufficient paper balance");
     }
+
+    public List<WalletBalance> findByUserId(UUID userId) {
+        return jdbcTemplate.query("SELECT currency, available_amount FROM paper_wallet WHERE user_id = ? ORDER BY currency",
+                (rs, row) -> new WalletBalance(rs.getString(1), rs.getBigDecimal(2)), userId);
+    }
+
+    public record WalletBalance(String currency, BigDecimal availableAmount) {}
 }
