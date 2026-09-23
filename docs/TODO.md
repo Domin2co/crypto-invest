@@ -44,8 +44,6 @@
 - [x] 공통 market model, 입력 검증, timeout·HTTP 오류 처리
 - [x] 실제 두 거래소 ticker runtime 확인
 
-## 진행 중
-
 ### Phase 4 — Private Read Wallet API
 
 - [x] 사용자별 암호화된 거래소 자격증명 저장/조회 service
@@ -55,8 +53,6 @@
 - [x] 잔고·평균 매수가 공통 model
 - [x] 내부 service의 authenticated user ID 기반 계정 분리
 - [x] Read-only unit test
-
-## 예정
 
 ### Phase 5 — Market Data Normalization
 
@@ -95,7 +91,7 @@
 - [x] `REBALANCE_ALL`, `KEEP_EXISTING_ASSETS`, `CASH_ONLY` (단위 테스트 완료)
 - [x] 기존 OrderPlanner → RiskEngine → TradingService 경로 재사용 (PAPER 체결 경로 단위 테스트 완료)
 
-### Phase 11 — Frontend Dashboard (보완 진행 중)
+### Phase 11 — Frontend Dashboard
 
 - [x] Dashboard, 시장 시세, PAPER 거래·주문 내역 화면
 - [x] 공개 일봉 기반 추천 API 연동 및 데이터 시각·출처·지표·한계 표시
@@ -109,18 +105,22 @@
 - [x] XSS, CSRF, SQL injection, CORS 검토 (React 기본 escaping·입력 검증·JDBC bind parameter·stateless bearer 및 허용/차단 CORS 통합 테스트)
 - [x] secret/Authorization header logging 차단 (request detail·Tomcat access log 비활성화, Bearer filter 무로그 확인)
 - [x] timeout recovery, HTTP 429/500, malformed response, insufficient balance (읽기 API 재시도 금지·timeout/오류 단위 테스트, PAPER 잔고 거절 테스트)
+- [x] PAPER/LIVE 멱등성 조회의 사용자 소유자 범위 및 타 사용자 키 충돌 시 재사용 차단·PAPER 롤백 검증
 - [x] Mock/PAPER E2E (PAPER UI·credential 미노출·공개 시세 E2E 완료)
 - [x] PostgreSQL Flyway·repository 통합 테스트 (rollback 격리된 실제 DB 검증 완료)
 - [x] backend/frontend API 통합 테스트 (Vite `/api` proxy·실제 공개 시세 runtime/E2E 완료)
+
+## 진행 중
 
 ### Phase 13 — Live Trading
 
 > Phase 12 검증 완료 뒤에만 착수한다.
 
-- [x] LiveTradingGuard (PAPER 기본값·LIVE 이중 스위치·일일 한도·RiskEngine 차단 단위 테스트)
-- [x] Live order adapter 및 주문 상태 확인 (Upbit/Bithumb client order ID·서명·상태 변환 단위 테스트, controller 미노출)
-- [x] timeout recovery: 기존 주문 조회 후 안전할 때만 후속 처리 (재전송 없이 client order ID 조회 단위 테스트)
-- [ ] 실거래 권한·일일/종목 제한·kill switch·audit log (일일/자산비중/kill switch 구현, 사용자 재확인·운영 승인·실환경 검증 대기)
+- [x] LiveTradingGuard (PAPER 기본값·LIVE 설정·기본 차단 전역 kill switch·일일 한도·RiskEngine 차단 단위 테스트)
+- [x] Live order adapter 및 주문 상태 확인 (Upbit HS512 / Bithumb HS256+timestamp·SHA-512 query hash·36자 client ID 단위 테스트)
+- [x] timeout/process recovery: 제출 의도 커밋, timeout/408/5xx/client ID 충돌 시 재전송 없이 조회, 종료된 부분 체결 수량·완료 시각 보존
+- [ ] 인증된 요청부터 LIVE 주문까지 서버가 생성·검증한 OrderPlan, 실제 잔고 기반 위험 한도 및 사용자 소유권을 연결하는 실행 경로 구현 (현재 LIVE controller 미노출)
+- [ ] 사용자별 실거래 권한·운영 승인 및 실환경 거래소 권한/주문 상태 검증 (공개 controller 미노출, 실제 주문 테스트 금지)
 
 ## 상시 준수 항목
 

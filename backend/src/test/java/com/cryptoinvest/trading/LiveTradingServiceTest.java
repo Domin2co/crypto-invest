@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.isNull;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -26,7 +28,7 @@ class LiveTradingServiceTest {
         LiveOrderClient client = mock(LiveOrderClient.class);
         LiveTradingConfirmationService confirmations = mock(LiveTradingConfirmationService.class);
         OrderPlan plan = new OrderPlan(UUID.randomUUID(), Exchange.UPBIT, "KRW-BTC", "BUY", new BigDecimal("10000"), new BigDecimal("0.1"), "rejected-key");
-        when(orders.findByIdempotencyKey(plan.idempotencyKey())).thenReturn(Optional.empty());
+        when(orders.findByUserAndIdempotencyKey(plan.userId(), plan.idempotencyKey())).thenReturn(Optional.empty());
         when(orders.submittedAmountToday(plan.userId())).thenReturn(BigDecimal.ZERO);
         doThrow(new IllegalStateException("Live order rejected: TRADING_MODE_NOT_LIVE"))
                 .when(guard).requireAllowed(any(), any(), any());
@@ -47,15 +49,15 @@ class LiveTradingServiceTest {
         OrderPlan plan = new OrderPlan(UUID.randomUUID(), Exchange.UPBIT, "KRW-BTC", "BUY", new BigDecimal("10000"), new BigDecimal("0.1"), "timeout-key");
         String clientOrderId = LiveTradingService.clientOrderId(plan.idempotencyKey());
         ExchangeCredentials account = new ExchangeCredentials("access", "secret");
-        LiveOrder submitted = new LiveOrder(UUID.randomUUID(), Exchange.UPBIT, clientOrderId, null, "SUBMITTED", BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);
-        LiveOrder filled = new LiveOrder(null, Exchange.UPBIT, clientOrderId, "exchange-id", "FILLED", BigDecimal.ONE, new BigDecimal("10000"), BigDecimal.ZERO);
-        when(orders.findByIdempotencyKey(plan.idempotencyKey())).thenReturn(Optional.empty());
+        LiveOrder submitted = new LiveOrder(UUID.randomUUID(), Exchange.UPBIT, clientOrderId, null, "SUBMITTED", BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, false);
+        LiveOrder filled = new LiveOrder(null, Exchange.UPBIT, clientOrderId, "exchange-id", "FILLED", BigDecimal.ONE, new BigDecimal("10000"), BigDecimal.ZERO, true);
+        when(orders.findByUserAndIdempotencyKey(plan.userId(), plan.idempotencyKey())).thenReturn(Optional.empty());
         when(orders.submittedAmountToday(plan.userId())).thenReturn(BigDecimal.ZERO);
         when(credentials.getEnabled(plan.userId(), plan.exchange())).thenReturn(account);
         when(orders.createSubmitted(any(), any(), any(), any())).thenReturn(submitted);
         when(client.submit(any(), any(), any(), any())).thenThrow(new LiveOrderUnknownResultException("timeout", new HttpTimeoutException("timeout")));
         when(client.findByClientOrderId(Exchange.UPBIT, clientOrderId, account)).thenReturn(filled);
-        when(orders.update(submitted, filled)).thenReturn(new LiveOrder(submitted.id(), Exchange.UPBIT, clientOrderId, "exchange-id", "FILLED", BigDecimal.ONE, new BigDecimal("10000"), BigDecimal.ZERO));
+        when(orders.update(submitted, filled)).thenReturn(new LiveOrder(submitted.id(), Exchange.UPBIT, clientOrderId, "exchange-id", "FILLED", BigDecimal.ONE, new BigDecimal("10000"), BigDecimal.ZERO, true));
 
         LiveOrder result = new LiveTradingService(guard, orders, credentials, client, confirmations)
                 .execute(UUID.randomUUID(), plan, null, new RiskPolicy(false, BigDecimal.ONE, new BigDecimal("20000"), BigDecimal.ONE));
@@ -65,6 +67,50 @@ class LiveTradingServiceTest {
         verify(client).findByClientOrderId(Exchange.UPBIT, clientOrderId, account);
     }
 
+    @Test void retryOfPersistedSubmittedOrderQueriesStatusInsteadOfSendingAgain() {
+        LiveTradingGuard guard = mock(LiveTradingGuard.class);
+        LiveOrderRepository orders = mock(LiveOrderRepository.class);
+        ExchangeAccountCredentialService credentials = mock(ExchangeAccountCredentialService.class);
+        LiveOrderClient client = mock(LiveOrderClient.class);
+        LiveTradingConfirmationService confirmations = mock(LiveTradingConfirmationService.class);
+        OrderPlan plan = new OrderPlan(UUID.randomUUID(), Exchange.UPBIT, "KRW-BTC", "BUY", new BigDecimal("10000"), new BigDecimal("0.1"), "persisted-submitted-key");
+        String clientOrderId = LiveTradingService.clientOrderId(plan.idempotencyKey());
+        ExchangeCredentials account = new ExchangeCredentials("access", "secret");
+        LiveOrder submitted = new LiveOrder(UUID.randomUUID(), Exchange.UPBIT, clientOrderId, null, "SUBMITTED", BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, false);
+        LiveOrder filled = new LiveOrder(null, Exchange.UPBIT, clientOrderId, "exchange-id", "FILLED", BigDecimal.ONE, new BigDecimal("10000"), BigDecimal.ZERO, true);
+        when(orders.findByUserAndIdempotencyKey(plan.userId(), plan.idempotencyKey())).thenReturn(Optional.of(submitted));
+        when(credentials.getEnabled(plan.userId(), plan.exchange())).thenReturn(account);
+        when(client.findByClientOrderId(Exchange.UPBIT, clientOrderId, account)).thenReturn(filled);
+        when(orders.update(submitted, filled)).thenReturn(new LiveOrder(submitted.id(), Exchange.UPBIT, clientOrderId,
+                "exchange-id", "FILLED", BigDecimal.ONE, new BigDecimal("10000"), BigDecimal.ZERO, true));
+
+        LiveOrder result = new LiveTradingService(guard, orders, credentials, client, confirmations)
+                .execute(UUID.randomUUID(), plan, null, new RiskPolicy(false, BigDecimal.ONE, new BigDecimal("20000"), BigDecimal.ONE));
+
+        assertThat(result.status()).isEqualTo("FILLED");
+        verify(client).findByClientOrderId(Exchange.UPBIT, clientOrderId, account);
+        verify(client, never()).submit(any(), isNull(), any(), any());
+        verifyNoInteractions(guard, confirmations);
+    }
+
+    @Test void terminalPartialFillIsReturnedWithoutAnotherExchangeQuery() {
+        LiveTradingGuard guard = mock(LiveTradingGuard.class);
+        LiveOrderRepository orders = mock(LiveOrderRepository.class);
+        ExchangeAccountCredentialService credentials = mock(ExchangeAccountCredentialService.class);
+        LiveOrderClient client = mock(LiveOrderClient.class);
+        LiveTradingConfirmationService confirmations = mock(LiveTradingConfirmationService.class);
+        OrderPlan plan = new OrderPlan(UUID.randomUUID(), Exchange.BITHUMB, "KRW-BTC", "BUY", new BigDecimal("10000"), BigDecimal.ONE, "closed-partial-key");
+        LiveOrder partial = new LiveOrder(UUID.randomUUID(), Exchange.BITHUMB, "client-id", "exchange-id", "PARTIALLY_FILLED",
+                new BigDecimal("0.006"), new BigDecimal("6000"), new BigDecimal("3"), true);
+        when(orders.findByUserAndIdempotencyKey(plan.userId(), plan.idempotencyKey())).thenReturn(Optional.of(partial));
+
+        LiveOrder result = new LiveTradingService(guard, orders, credentials, client, confirmations)
+                .execute(UUID.randomUUID(), plan, null, new RiskPolicy(false, BigDecimal.ONE, new BigDecimal("20000"), BigDecimal.ONE));
+
+        assertThat(result).isEqualTo(partial);
+        verifyNoInteractions(guard, credentials, client, confirmations);
+    }
+
     @Test void missingConfirmationDoesNotEvaluateRiskDecryptCredentialsOrCallAnExchange() {
         LiveTradingGuard guard = mock(LiveTradingGuard.class);
         LiveOrderRepository orders = mock(LiveOrderRepository.class);
@@ -72,7 +118,7 @@ class LiveTradingServiceTest {
         LiveOrderClient client = mock(LiveOrderClient.class);
         LiveTradingConfirmationService confirmations = mock(LiveTradingConfirmationService.class);
         OrderPlan plan = new OrderPlan(UUID.randomUUID(), Exchange.UPBIT, "KRW-BTC", "BUY", new BigDecimal("10000"), new BigDecimal("0.1"), "confirmation-key");
-        when(orders.findByIdempotencyKey(plan.idempotencyKey())).thenReturn(Optional.empty());
+        when(orders.findByUserAndIdempotencyKey(plan.userId(), plan.idempotencyKey())).thenReturn(Optional.empty());
         doThrow(new IllegalStateException("Live order rejected: LIVE_TRADING_CONFIRMATION_REQUIRED"))
                 .when(confirmations).requireActive(plan.userId());
 

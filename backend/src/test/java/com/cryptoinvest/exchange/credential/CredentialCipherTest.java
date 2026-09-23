@@ -8,7 +8,8 @@ import org.junit.jupiter.api.Test;
 
 class CredentialCipherTest {
 
-    private static final String KEY = Base64.getEncoder().encodeToString(new byte[32]);
+    private static final String KEY = standardBase64Key();
+    private static String standardBase64Key() { byte[] key = new byte[32]; java.util.Arrays.fill(key, (byte) 0xfb); return Base64.getEncoder().encodeToString(key); }
     private final CredentialCipher cipher = new CredentialCipher(KEY);
 
     @Test
@@ -20,6 +21,14 @@ class CredentialCipherTest {
         assertThat(cipher.decrypt(first, "account-id:access")).isEqualTo("access-key");
         assertThatThrownBy(() -> cipher.decrypt(first, "other-account:access"))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void acceptsUrlSafeKeyForExistingConfigurations() {
+        byte[] decoded = Base64.getDecoder().decode(KEY);
+        String urlKey = Base64.getUrlEncoder().withoutPadding().encodeToString(decoded);
+        CredentialCipher urlCipher = new CredentialCipher(urlKey);
+        assertThat(urlCipher.decrypt(urlCipher.encrypt("secret", "account"), "account")).isEqualTo("secret");
     }
 
     @Test

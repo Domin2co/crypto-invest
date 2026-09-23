@@ -9,4 +9,5 @@ import java.util.List;
 public interface PrivateAccountClient {
     Exchange exchange();
     List<ExchangeBalance> getBalances(ExchangeCredentials credentials);
+    ExchangeOrderChance getOrderChance(ExchangeCredentials credentials, String market);
 }

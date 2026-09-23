@@ -44,7 +44,7 @@ public class LiveOrderClient {
     public LiveOrder submit(OrderPlan plan, BigDecimal sellQuantity, String clientOrderId, ExchangeCredentials credentials) {
         LinkedHashMap<String, String> body = orderBody(plan, sellQuantity, clientOrderId);
         String query = queryString(body);
-        JsonNode response = request("POST", baseUrl(plan.exchange()) + "/" + orderPath(plan.exchange()), query,
+        JsonNode response = request(plan.exchange(), "POST", baseUrl(plan.exchange()) + "/" + orderPath(plan.exchange()), query,
                 json(body), credentials);
         return result(plan.exchange(), clientOrderId, response);
     }
@@ -52,18 +52,24 @@ public class LiveOrderClient {
     public LiveOrder findByClientOrderId(Exchange exchange, String clientOrderId, ExchangeCredentials credentials) {
         String field = exchange == Exchange.UPBIT ? "identifier" : "client_order_id";
         String query = field + "=" + clientOrderId;
-        JsonNode response = request("GET", baseUrl(exchange) + "/v1/order?" + query, query, null, credentials);
+        JsonNode response = request(exchange, "GET", baseUrl(exchange) + "/v1/order?" + query, query, null, credentials);
         return result(exchange, clientOrderId, response);
     }
 
-    private JsonNode request(String method, String url, String query, String body, ExchangeCredentials credentials) {
+    private JsonNode request(Exchange exchange, String method, String url, String query, String body, ExchangeCredentials credentials) {
         try {
             HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(url)).timeout(TIMEOUT)
-                    .header("Accept", "application/json").header("Authorization", signer.bearerTokenForQuery(credentials, query));
+                    .header("Accept", "application/json").header("Authorization", signer.bearerTokenForQuery(credentials, query,
+                            exchange == Exchange.UPBIT ? "HS512" : "HS256", exchange == Exchange.BITHUMB));
             if ("POST".equals(method)) request.header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(body));
             else request.GET();
             HttpResponse<String> response = httpClient.send(request.build(), HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                // A gateway/timeout or duplicate client ID can happen after acceptance; query the saved ID instead of marking failed.
+                if (response.statusCode() == 408 || response.statusCode() >= 500
+                        || ("POST".equals(method) && response.statusCode() == 409)) {
+                    throw new LiveOrderUnknownResultException("Exchange order API result is unknown (HTTP " + response.statusCode() + ")");
+                }
                 throw new ExchangeApiException("Exchange order API returned HTTP " + response.statusCode());
             }
             return objectMapper.readTree(response.body());
@@ -97,11 +103,19 @@ public class LiveOrderClient {
     private LiveOrder result(Exchange exchange, String clientOrderId, JsonNode node) {
         String exchangeOrderId = text(node, "uuid", "order_id", "id");
         String state = text(node, "state", "status");
-        return new LiveOrder(null, exchange, clientOrderId, exchangeOrderId, status(state),
-                decimal(node, "executed_volume"), decimal(node, "executed_funds", "executed_amount"), decimal(node, "paid_fee", "fee"));
+        BigDecimal executedQuantity = decimal(node, "executed_volume");
+        BigDecimal volume = decimal(node, "volume");
+        boolean terminal = "done".equals(state) || "filled".equals(state) || "cancel".equals(state) || "cancelled".equals(state);
+        String status = status(state);
+        if (terminal && ("done".equals(state) || "filled".equals(state)) && volume.signum() > 0 && executedQuantity.compareTo(volume) < 0) {
+            status = executedQuantity.signum() > 0 ? "PARTIALLY_FILLED" : "UNKNOWN";
+        }
+        return new LiveOrder(null, exchange, clientOrderId, exchangeOrderId, status,
+                executedQuantity, decimal(node, "executed_funds", "executed_amount"), decimal(node, "paid_fee", "fee"), terminal);
     }
 
     private static String status(String state) {
+        if (state == null) return "UNKNOWN";
         return switch (state) {
             case "wait", "watch", "pending" -> "SUBMITTED";
             case "trade" -> "PARTIALLY_FILLED";

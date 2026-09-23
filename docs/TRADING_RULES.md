@@ -43,6 +43,8 @@ TradingService
 
 실거래는 기본 비활성화한다.
 
+전역 kill switch(`LIVE_TRADING_KILL_SWITCH`)가 켜져 있으면 LIVE 주문은 항상 거절한다. 기본값은 차단(`true`)이며, 사용자별 RiskEngine 정책보다 먼저 검사한다.
+
 ---
 
 ## 3. 자동투자 모드
@@ -131,6 +133,8 @@ Order Request
 → Determine Existing Execution
 → Retry only if safe
 ```
+
+주문 POST의 timeout, HTTP 408/5xx 또는 client ID 충돌은 체결 실패로 단정하지 않고 저장된 client ID로 상태를 조회한다. HTTP 429 및 명시적 4xx 거절은 자동 재시도하지 않는다.
 
 ---
 

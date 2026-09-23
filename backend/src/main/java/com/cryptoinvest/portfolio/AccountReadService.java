@@ -3,6 +3,7 @@ package com.cryptoinvest.portfolio;
 import com.cryptoinvest.exchange.Exchange;
 import com.cryptoinvest.exchange.credential.ExchangeAccountCredentialService;
 import com.cryptoinvest.exchange.credential.ExchangeCredentials;
+import com.cryptoinvest.exchange.privateapi.ExchangeOrderChance;
 import com.cryptoinvest.exchange.privateapi.PrivateAccountClient;
 import java.util.List;
 import java.util.Map;
@@ -22,8 +23,18 @@ public class AccountReadService {
     }
 
     public List<ExchangeBalance> getBalances(UUID authenticatedUserId, Exchange exchange) {
-        ExchangeCredentials account = credentials.getEnabled(authenticatedUserId, exchange);
-        if (account == null) throw new IllegalStateException("No enabled exchange account");
+        ExchangeCredentials account = enabledCredentials(authenticatedUserId, exchange);
         return clients.get(exchange).getBalances(account);
+    }
+
+    public ExchangeOrderChance getOrderChance(UUID authenticatedUserId, Exchange exchange, String market) {
+        ExchangeCredentials account = enabledCredentials(authenticatedUserId, exchange);
+        return clients.get(exchange).getOrderChance(account, market);
+    }
+
+    private ExchangeCredentials enabledCredentials(UUID userId, Exchange exchange) {
+        ExchangeCredentials account = credentials.getEnabled(userId, exchange);
+        if (account == null) throw new IllegalStateException("No enabled exchange account");
+        return account;
     }
 }

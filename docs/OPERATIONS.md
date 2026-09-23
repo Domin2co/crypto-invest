@@ -8,7 +8,7 @@
 
 ## 장애 및 보안 사고
 
-1. 즉시 `LIVE_TRADING_ENABLED=false` 및 kill switch로 신규 주문을 중지한다.
+1. 즉시 `LIVE_TRADING_ENABLED=false`와 `LIVE_TRADING_KILL_SWITCH=true`로 신규 LIVE 주문을 중지한다. kill switch 기본값은 `true`다.
 2. UNKNOWN 주문은 client order ID로 거래소 상태를 조회하고 재전송하지 않는다.
 3. API key 노출 의심 시 해당 key를 거래소에서 폐기·재발급하고 DB 계정을 비활성화한다.
 4. 영향 범위, 로그(비밀값 제외), 시간대, 조치, 사용자 통지/신고 필요성을 기록한다.

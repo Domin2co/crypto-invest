@@ -1,6 +1,8 @@
 package com.cryptoinvest.trading;
 
 import java.math.BigDecimal;
+import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -11,17 +13,16 @@ public class PaperOrderPlanRepository {
     private final JdbcTemplate jdbcTemplate;
     public PaperOrderPlanRepository(JdbcTemplate jdbcTemplate) { this.jdbcTemplate = jdbcTemplate; }
 
-    public UUID createOrFind(OrderPlan plan, BigDecimal sellQuantity) {
+    public Optional<UUID> createOrFind(OrderPlan plan, BigDecimal sellQuantity) {
         UUID id = UUID.randomUUID();
         int inserted = jdbcTemplate.update("""
                 INSERT INTO order_plan (id, user_id, exchange, symbol, side, order_type, requested_quantity, requested_amount, status, idempotency_key)
                 VALUES (?, ?, ?, ?, ?, 'MARKET', ?, ?, 'ACCEPTED', ?)
                 ON CONFLICT (idempotency_key) DO NOTHING
                 """, id, plan.userId(), plan.exchange().name(), plan.symbol(), plan.side(), sellQuantity, plan.amount(), plan.idempotencyKey());
-        if (inserted == 1) return id;
-        UUID existing = jdbcTemplate.query("SELECT id FROM order_plan WHERE idempotency_key = ?",
-                rs -> rs.next() ? rs.getObject(1, UUID.class) : null, plan.idempotencyKey());
-        if (existing == null) throw new IllegalStateException("Paper order plan is unavailable");
-        return existing;
+        if (inserted == 1) return Optional.of(id);
+        List<UUID> existing = jdbcTemplate.query("SELECT id FROM order_plan WHERE user_id = ? AND idempotency_key = ?",
+                (rs, row) -> rs.getObject(1, UUID.class), plan.userId(), plan.idempotencyKey());
+        return existing.stream().findFirst();
     }
 }

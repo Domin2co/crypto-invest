@@ -21,8 +21,9 @@ class PersistentPaperTradingServiceTest {
     @Test void persistsWalletAndAuditOnlyAfterRiskAcceptsBuy() {
         PaperWalletRepository wallet = mock(PaperWalletRepository.class);
         PaperOrderAuditRepository orders = mock(PaperOrderAuditRepository.class);
-        when(orders.findByIdempotencyKey("paper-buy")).thenReturn(Optional.empty());
         OrderPlan plan = new OrderPlan(UUID.randomUUID(), Exchange.UPBIT, "BTC", "BUY", new BigDecimal("10000"), new BigDecimal("0.1"), "paper-buy");
+        when(orders.findByUserAndIdempotencyKey(plan.userId(), "paper-buy")).thenReturn(Optional.empty());
+        when(orders.save(any(), any(), any(), any())).thenReturn(true);
         RiskPolicy policy = new RiskPolicy(false, BigDecimal.ONE, new BigDecimal("20000"), BigDecimal.ONE);
 
         var fill = new PersistentPaperTradingService(wallet, orders, new BigDecimal("50000"))
@@ -46,5 +47,19 @@ class PersistentPaperTradingServiceTest {
                 .execute(UUID.randomUUID(), plan, BigDecimal.ONE, null, BigDecimal.ZERO, stopped))
                 .isInstanceOf(IllegalStateException.class);
         verify(wallet, never()).initializeKrw(any(), any());
+    }
+
+    @Test void rollsBackPaperExecutionWhenIdempotencyInsertLosesRace() {
+        PaperWalletRepository wallet = mock(PaperWalletRepository.class);
+        PaperOrderAuditRepository orders = mock(PaperOrderAuditRepository.class);
+        OrderPlan plan = new OrderPlan(UUID.randomUUID(), Exchange.UPBIT, "BTC", "BUY", new BigDecimal("10000"), new BigDecimal("0.1"), "raced-key");
+        when(orders.findByUserAndIdempotencyKey(plan.userId(), plan.idempotencyKey())).thenReturn(Optional.empty());
+        when(orders.save(any(), any(), any(), any())).thenReturn(false);
+        RiskPolicy policy = new RiskPolicy(false, BigDecimal.ONE, new BigDecimal("20000"), BigDecimal.ONE);
+
+        assertThatThrownBy(() -> new PersistentPaperTradingService(wallet, orders, new BigDecimal("50000"))
+                .execute(UUID.randomUUID(), plan, new BigDecimal("1000"), null, new BigDecimal("0.001"), policy))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Paper order idempotency conflict");
     }
 }

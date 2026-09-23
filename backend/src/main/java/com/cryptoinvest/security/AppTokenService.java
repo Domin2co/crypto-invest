@@ -14,12 +14,12 @@ import org.springframework.stereotype.Component;
 /** 서버만 가진 HMAC 키로 로그인 토큰의 사용자 ID와 만료 시각을 검증한다. */
 @Component
 public class AppTokenService {
-    private final String secret;
+    private final byte[] signingKey;
     private final Clock clock;
 
     @Autowired
     public AppTokenService(@Value("${app.auth-token-secret:}") String secret) { this(secret, Clock.systemUTC()); }
-    AppTokenService(String secret, Clock clock) { this.secret = secret; this.clock = clock; }
+    AppTokenService(String secret, Clock clock) { this.signingKey = decodeKey(secret); this.clock = clock; }
 
     public String issue(UUID userId) {
         long expiresAt = clock.instant().plusSeconds(60 * 60 * 8).getEpochSecond();
@@ -37,15 +37,24 @@ public class AppTokenService {
         return UUID.fromString(values[0]);
     }
 
-    private String signature(String payload) {
+    private static byte[] decodeKey(String secret) {
+        if (secret == null || secret.isBlank()) throw new IllegalStateException("AUTH_TOKEN_SECRET must be a base64 32-byte key");
         try {
             byte[] key = Base64.getDecoder().decode(secret);
             if (key.length < 32) throw new IllegalStateException("AUTH_TOKEN_SECRET must be a base64 32-byte key");
+            return key;
+        } catch (IllegalArgumentException exception) {
+            throw new IllegalStateException("AUTH_TOKEN_SECRET must be a base64 32-byte key", exception);
+        }
+    }
+
+    private String signature(String payload) {
+        try {
             Mac mac = Mac.getInstance("HmacSHA256");
-            mac.init(new SecretKeySpec(key, "HmacSHA256"));
+            mac.init(new SecretKeySpec(signingKey, "HmacSHA256"));
             return Base64.getUrlEncoder().withoutPadding().encodeToString(mac.doFinal(payload.getBytes(StandardCharsets.UTF_8)));
-        } catch (java.security.GeneralSecurityException | IllegalArgumentException exception) {
-            throw new IllegalStateException("Authentication token key is unavailable", exception);
+        } catch (java.security.GeneralSecurityException exception) {
+            throw new IllegalStateException("Authentication token signing failed", exception);
         }
     }
 }

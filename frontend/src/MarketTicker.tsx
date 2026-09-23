@@ -13,9 +13,9 @@ export default function MarketTicker() {
   const ticker = useQuery({ queryKey: ['ticker', 'UPBIT', 'KRW-BTC'], queryFn: loadTicker, retry: false })
   const value = ticker.data ? `₩${Math.round(ticker.data.price).toLocaleString('ko-KR')}` : ticker.isLoading ? '불러오는 중' : '연동 대기'
 
-  return <section className="mt-6 rounded-xl border border-slate-800 bg-slate-900 p-5" aria-label="KRW-BTC 공개 시세">
-    <p className="text-sm text-slate-400">Upbit 공개 시세 · KRW-BTC</p>
-    <strong className="mt-2 block text-2xl text-white">{value}</strong>
+  return <section className="mt-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm" aria-label="KRW-BTC 공개 시세">
+    <p className="text-sm text-slate-600">Upbit 공개 시세 · KRW-BTC</p>
+    <strong className="mt-2 block text-2xl text-slate-950">{value}</strong>
     <p className="mt-2 text-sm text-slate-500">공개 API만 사용하며 계정 정보는 요청하지 않습니다.</p>
   </section>
 }

@@ -28,14 +28,14 @@ public class PaperOrderAuditRepository {
         return true;
     }
 
-    public Optional<PaperTradingService.PaperFill> findByIdempotencyKey(String idempotencyKey) {
+    public Optional<PaperTradingService.PaperFill> findByUserAndIdempotencyKey(UUID userId, String idempotencyKey) {
         return jdbcTemplate.query("""
                 SELECT symbol, side, executed_quantity, executed_amount, fee, status, idempotency_key
-                FROM trade_order WHERE trading_mode = 'PAPER' AND idempotency_key = ?
+                FROM trade_order WHERE user_id = ? AND trading_mode = 'PAPER' AND idempotency_key = ?
                 """, rs -> rs.next() ? Optional.of(new PaperTradingService.PaperFill(
                 rs.getString("symbol"), rs.getString("side"), rs.getBigDecimal("executed_quantity"),
                 rs.getBigDecimal("executed_amount"), rs.getBigDecimal("fee"), rs.getString("status"),
-                rs.getString("idempotency_key"))) : Optional.empty(), idempotencyKey);
+                rs.getString("idempotency_key"))) : Optional.empty(), userId, idempotencyKey);
     }
 
     public List<PaperOrder> findByUserId(UUID userId) {

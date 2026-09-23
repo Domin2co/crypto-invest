@@ -129,3 +129,11 @@ Mock은 최소한 다음 Scenario를 지원한다.
 
 `PUT /api/portfolio/{exchange}/targets`는 인증된 본인의 통화별 목표 비중만 저장한다. 각 비중은 0~1,
 전체 합계는 1 이하여야 하며 저장 후 조회 결과의 rebalancing gap은 `목표 비중 - 현재 비중`으로 계산한다.
+
+## 11. LIVE 인증·멱등 식별자
+
+- Upbit JWT는 `HS512`를 사용하고 query/body 서명에는 순서가 동일한 query string의 SHA-512 hash를 넣는다.
+- Bithumb JWT는 `HS256`으로 서명하며 millisecond `timestamp`가 필수다. query/body hash는 SHA-512를 쓴다.
+- Bithumb `client_order_id`는 영문·숫자·`-`·`_`만 허용되고 1~36자다. 내부 멱등성 키로 만든 client ID는 이 제한 안에 있어야 한다.
+- Bithumb 응답의 `done`은 IOC/FOK 잔량 취소를 포함할 수 있다. `executed_volume < volume`이면 체결수량을 보존한 종료된 `PARTIALLY_FILLED`로 기록하고 재조회/재주문하지 않는다.
+- 관련 공식 규격: [Upbit 인증](https://docs.upbit.com/kr/reference/auth), [Upbit 주문 조회](https://docs.upbit.com/kr/reference/get-order), [Bithumb 인증 토큰](https://apidocs.bithumb.com/docs/인증-토큰-생성하기), [Bithumb 주문 요청](https://apidocs.bithumb.com/reference/주문-요청), [Bithumb 개별 주문 조회](https://apidocs.bithumb.com/v2.1.0/reference/개별-주문-조회).

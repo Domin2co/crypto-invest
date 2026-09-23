@@ -9,7 +9,7 @@ import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import org.springframework.stereotype.Component;
 
-/** Private API 요청 직전에만 HS512 JWT를 만든다. 생성 토큰과 key는 로그에 남기지 않는다. */
+/** 거래소 규격 JWT를 요청 직전에 만들며 토큰과 key는 로그에 남기지 않는다. */
 @Component
 public class JwtSigner {
     private static final Base64.Encoder ENCODER = Base64.getUrlEncoder().withoutPadding();
@@ -24,7 +24,12 @@ public class JwtSigner {
 
     /** 주문 본문·조회 query와 같은 순서의 문자열을 서명해 거래소가 요청을 검증할 수 있게 한다. */
     public String bearerTokenForQuery(ExchangeCredentials credentials, String queryString) {
-        return bearerToken(credentials, "HS512", false, queryString);
+        return bearerTokenForQuery(credentials, queryString, "HS512", false);
+    }
+
+    /** 거래소별 JWT 서명 알고리즘·timestamp 규칙과 동일한 query hash를 적용한다. */
+    public String bearerTokenForQuery(ExchangeCredentials credentials, String queryString, String algorithm, boolean includeTimestamp) {
+        return bearerToken(credentials, algorithm, includeTimestamp, queryString);
     }
 
     private String bearerToken(ExchangeCredentials credentials, String algorithm, boolean includeTimestamp, String queryString) {

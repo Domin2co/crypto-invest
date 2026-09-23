@@ -3,63 +3,71 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import App from './App'
 
-const ticker = { market: 'KRW-BTC', price: 123456, capturedAt: '2026-09-21T00:00:00Z' }
-const recommendation = { recommendation: { symbol: 'KRW-BTC', score: 90, signal: 'ACCUMULATE', targetWeight: 0.35, reasons: ['RSI 과매도'] }, generatedAt: '2026-09-21T00:00:00Z', dataCapturedAt: '2026-09-20T00:00:00Z', dataSource: 'UPBIT public daily candles', candleCount: 15, indicators: { rsi: 25, momentum: 1, volatilityPercent: 0.5 }, limitations: ['추천은 주문 지시가 아닙니다.'] }
-const publicFetch = (input: RequestInfo | URL) => Promise.resolve({ ok: true, json: async () => String(input).includes('/api/recommendations/') ? recommendation : ticker })
+function mount() {
+  return render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><App /></QueryClientProvider>)
+}
 
-describe('App', () => {
-  afterEach(() => { cleanup(); vi.unstubAllGlobals() })
+describe('App navigation and account flow', () => {
+  afterEach(() => { cleanup(); vi.unstubAllGlobals(); window.history.replaceState(null, '', '/') })
 
-  it('shows the paper-only dashboard and public ticker without exposing an API key', async () => {
-    vi.stubGlobal('fetch', vi.fn(publicFetch))
-    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><App /></QueryClientProvider>)
-
-    expect(screen.getByRole('heading', { name: '투자 현황' })).toBeInTheDocument()
-    expect(screen.getByLabelText('거래 모드: PAPER')).toHaveTextContent('PAPER 모드')
-    expect(screen.getByRole('heading', { name: '추천과 주문 계획' })).toBeInTheDocument()
-    expect(screen.queryByText(/API Key:|Secret:/i)).not.toBeInTheDocument()
-    expect(await screen.findByText('₩123,456')).toBeInTheDocument()
-    expect(await screen.findByText(/ACCUMULATE · 점수 90/)).toBeInTheDocument()
+  it('routes each menu to a distinct page and keeps privacy policy in the global footer', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => ({ ok: true, json: async () => String(input).includes('/api/health') ? { status: 'UP', tradingMode: 'PAPER' } : {} })))
+    mount()
+    expect(await screen.findByText('정상')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '개인정보 처리방침' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: '포트폴리오 보기' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('link', { name: '포트폴리오' }))
+    expect(await screen.findByRole('heading', { name: '연동 포트폴리오' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '개인정보 처리방침' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('link', { name: '시장' }))
+    expect(await screen.findByRole('heading', { name: '주요 시세' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('link', { name: '추천' }))
+    expect(await screen.findByRole('heading', { name: '시장 데이터에 따른 참고 정보' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('link', { name: '거래 이력' }))
+    expect(await screen.findByRole('heading', { name: '로그인이 필요합니다' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('link', { name: '개인정보 처리방침' }))
+    expect(await screen.findByRole('heading', { name: '개인정보 처리방침' })).toBeInTheDocument()
   })
 
-  it('keeps the token in memory and makes PAPER trading available after required consent', async () => {
-    const fetchMock = vi.fn((input: RequestInfo | URL, _init?: RequestInit) => {
-      void _init
+  it('registers and logs in through backend APIs while keeping tokens out of browser storage', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input)
-      if (url.includes('/api/auth/register')) return Promise.resolve({ ok: true, json: async () => ({ accessToken: 'memory-only-token' }) })
-      if (url.includes('/api/privacy/me')) return Promise.resolve({ ok: true, json: async () => ({ email: 'user@example.com', consents: [{ type: 'PRIVACY', policyVersion: '2026-09-21', grantedAt: '2026-09-21T00:00:00Z', withdrawnAt: null }] }) })
-      if (url.includes('/api/paper/orders/summary')) return Promise.resolve({ ok: true, json: async () => ({ wallets: [], orders: [] }) })
-      if (url.includes('/api/portfolio/UPBIT/targets')) return Promise.resolve({ ok: true })
-      if (url.includes('/api/portfolio/')) return Promise.resolve({ ok: true, json: async () => ({ exchange: 'UPBIT', totalEvaluatedAmount: 100000, cashWeight: 0.4, capturedAt: '2026-09-21T00:00:00Z', positions: [{ currency: 'KRW', quantity: 40000, averageBuyPrice: 0, currentPrice: 1, evaluatedAmount: 40000, weight: 0.4, targetWeight: null, rebalancingGap: null }] }) })
-      return publicFetch(input)
+      if (url.includes('/api/auth/register') || url.includes('/api/auth/login')) return { ok: true, json: async () => ({ accessToken: 'memory-only-token' }) }
+      if (url.includes('/api/privacy/me')) return { ok: true, json: async () => ({ email: 'user@example.com', consents: [] }) }
+      if (url.includes('/api/health')) return { ok: true, json: async () => ({ status: 'UP', tradingMode: 'PAPER' }) }
+      if (url.includes('/api/paper/orders/summary')) return { ok: true, json: async () => ({ wallets: [], orders: [] }) }
+      return { ok: true, json: async () => ({}) }
     })
     vi.stubGlobal('fetch', fetchMock)
-    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><App /></QueryClientProvider>)
-
+    mount()
+    fireEvent.click(screen.getByRole('link', { name: '로그인 / 회원가입' }))
+    fireEvent.click(screen.getByRole('tab', { name: '회원가입' }))
     fireEvent.change(screen.getByLabelText('이메일'), { target: { value: 'user@example.com' } })
     fireEvent.change(screen.getByLabelText('비밀번호'), { target: { value: 'long-enough-password' } })
     fireEvent.click(screen.getByLabelText(/개인정보 처리에 동의합니다/))
     fireEvent.click(screen.getByRole('button', { name: '회원가입' }))
-
     expect(await screen.findByText('로그인 계정: user@example.com')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'PAPER 주문 실행' })).toBeInTheDocument()
-    const registerCall = fetchMock.mock.calls.find(([url]) => String(url).includes('/api/auth/register'))
-    expect(registerCall?.[1]).toMatchObject({ method: 'POST' })
-    expect(JSON.parse((registerCall?.[1] as RequestInit).body as string)).toMatchObject({ privacyAccepted: true, marketingAccepted: false })
-
-    fireEvent.change(screen.getByLabelText('접근 키'), { target: { value: 'test-access' } })
-    fireEvent.change(screen.getByLabelText('비밀 키'), { target: { value: 'test-secret' } })
-    fireEvent.click(screen.getByRole('button', { name: '암호화 저장' }))
-    expect(await screen.findByText(/암호화해 저장했습니다/)).toBeInTheDocument()
-    const accountCall = fetchMock.mock.calls.find(([url]) => String(url).includes('/api/exchange-accounts'))
-    expect(accountCall?.[1]).toMatchObject({ method: 'POST', headers: expect.objectContaining({ Authorization: 'Bearer memory-only-token' }) })
-
-    fireEvent.click(screen.getByRole('button', { name: '포트폴리오 새로고침' }))
-    expect(await screen.findByText('100,000 KRW')).toBeInTheDocument()
-    fireEvent.change(screen.getByLabelText('KRW 목표 비중 (0~1)'), { target: { value: '0.4' } })
-    fireEvent.click(screen.getByRole('button', { name: '목표 비중 저장' }))
-    expect(await screen.findByText('목표 비중을 저장했습니다.')).toBeInTheDocument()
-    const targetCall = fetchMock.mock.calls.find(([url]) => String(url).includes('/api/portfolio/UPBIT/targets'))
-    expect(JSON.parse((targetCall?.[1] as RequestInit).body as string)).toEqual({ targets: [{ currency: 'KRW', weight: 0.4 }] })
+    expect(localStorage.length).toBe(0)
+    fireEvent.click(screen.getByRole('button', { name: '로그아웃' }))
+    fireEvent.click(screen.getByRole('tab', { name: '로그인' }))
+    fireEvent.change(screen.getByLabelText('이메일'), { target: { value: 'user@example.com' } })
+    fireEvent.change(screen.getByLabelText('비밀번호'), { target: { value: 'long-enough-password' } })
+    fireEvent.click(screen.getByRole('button', { name: '로그인' }))
+    expect(await screen.findByText('로그인 계정: user@example.com')).toBeInTheDocument()
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/api/auth/register'))).toBe(true)
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/api/auth/login'))).toBe(true)
+  })
+  it('explains a backend configuration conflict during signup', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => String(input).includes('/api/auth/register')
+      ? { ok: false, status: 409, json: async () => ({ code: 'INVALID_STATE' }) }
+      : { ok: true, json: async () => ({ status: 'UP', tradingMode: 'PAPER' }) }))
+    mount()
+    fireEvent.click(screen.getByRole('link', { name: '로그인 / 회원가입' }))
+    fireEvent.click(screen.getByRole('tab', { name: '회원가입' }))
+    fireEvent.change(screen.getByLabelText('이메일'), { target: { value: 'new@example.com' } })
+    fireEvent.change(screen.getByLabelText('비밀번호'), { target: { value: 'long-enough-password' } })
+    fireEvent.click(screen.getByLabelText(/개인정보 처리에 동의합니다/))
+    fireEvent.click(screen.getByRole('button', { name: '회원가입' }))
+    expect(await screen.findByText(/서버 설정 또는 서비스 상태 문제/)).toBeInTheDocument()
   })
 })

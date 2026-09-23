@@ -11,23 +11,31 @@ import org.springframework.stereotype.Component;
 public class LiveTradingGuard {
     private final String tradingMode;
     private final boolean liveTradingEnabled;
+    private final boolean liveTradingKillSwitch;
     private final BigDecimal dailyLimit;
 
     public LiveTradingGuard(@Value("${app.trading-mode:PAPER}") String tradingMode,
             @Value("${app.live-trading-enabled:false}") boolean liveTradingEnabled,
+            @Value("${app.live-trading-kill-switch:true}") boolean liveTradingKillSwitch,
             @Value("${app.live-daily-limit:0}") BigDecimal dailyLimit) {
         this.tradingMode = tradingMode;
         this.liveTradingEnabled = liveTradingEnabled;
+        this.liveTradingKillSwitch = liveTradingKillSwitch;
         this.dailyLimit = dailyLimit;
+    }
+
+    public void requireSwitchesOpen() {
+        if (liveTradingKillSwitch) throw rejected("LIVE_KILL_SWITCH");
+        if (!"LIVE".equals(tradingMode)) throw rejected("TRADING_MODE_NOT_LIVE");
+        if (!liveTradingEnabled) throw rejected("LIVE_TRADING_DISABLED");
+        if (dailyLimit == null || dailyLimit.signum() <= 0) throw rejected("LIVE_DAILY_LIMIT_NOT_CONFIGURED");
     }
 
     /** 거절 사유는 감사 가능하지만 호출자는 이 메서드를 우회해 주문할 수 없다. */
     public void requireAllowed(OrderPlan plan, RiskPolicy policy, BigDecimal dailySubmittedAmount) {
+        requireSwitchesOpen();
         String riskReason = RiskEngine.rejectReason(plan, policy);
         if (riskReason != null) throw rejected(riskReason);
-        if (!"LIVE".equals(tradingMode)) throw rejected("TRADING_MODE_NOT_LIVE");
-        if (!liveTradingEnabled) throw rejected("LIVE_TRADING_DISABLED");
-        if (dailyLimit == null || dailyLimit.signum() <= 0) throw rejected("LIVE_DAILY_LIMIT_NOT_CONFIGURED");
         if (dailySubmittedAmount.add(plan.amount()).compareTo(dailyLimit) > 0) throw rejected("LIVE_DAILY_LIMIT");
     }
 

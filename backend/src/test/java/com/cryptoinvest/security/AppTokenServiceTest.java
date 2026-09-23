@@ -21,4 +21,9 @@ class AppTokenServiceTest {
         AppTokenService tokens = new AppTokenService(SECRET, Clock.systemUTC());
         assertThatThrownBy(() -> tokens.verify(tokens.issue(UUID.randomUUID()) + "x")).isInstanceOf(IllegalArgumentException.class);
     }
+    @Test void missingSigningKeyFailsAtTokenIssue() {
+        assertThatThrownBy(() -> new AppTokenService("", Clock.systemUTC()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("AUTH_TOKEN_SECRET");
+    }
 }

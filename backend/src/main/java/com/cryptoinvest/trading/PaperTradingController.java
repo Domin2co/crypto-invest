@@ -51,7 +51,8 @@ public class PaperTradingController {
         OrderPlan plan = new OrderPlan((UUID) authentication.getPrincipal(), request.exchange(), request.symbol(), request.side(),
                 request.amount(), BigDecimal.ZERO, request.idempotencyKey());
         if (RiskEngine.rejectReason(plan, policy) != null) throw new IllegalArgumentException("Paper order rejected");
-        UUID planId = plans.createOrFind(plan, request.quantity());
+        UUID planId = plans.createOrFind(plan, request.quantity())
+                .orElseThrow(() -> new IllegalStateException("Paper order idempotency conflict"));
         return paperTrading.execute(planId, plan, request.price(), request.quantity(), feeRate, policy);
     }
 

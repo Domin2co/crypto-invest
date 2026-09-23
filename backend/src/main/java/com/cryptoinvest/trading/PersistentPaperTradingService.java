@@ -27,7 +27,7 @@ public class PersistentPaperTradingService {
     @Transactional
     public synchronized PaperTradingService.PaperFill execute(UUID orderPlanId, OrderPlan plan, BigDecimal price,
             BigDecimal sellQuantity, BigDecimal feeRate, RiskPolicy policy) {
-        var existing = orderRepository.findByIdempotencyKey(plan.idempotencyKey());
+        var existing = orderRepository.findByUserAndIdempotencyKey(plan.userId(), plan.idempotencyKey());
         if (existing.isPresent()) return existing.get();
         String reason = RiskEngine.rejectReason(plan, policy);
         if (reason != null) throw new IllegalStateException("Paper order rejected: " + reason);
@@ -36,7 +36,9 @@ public class PersistentPaperTradingService {
         walletRepository.initializeKrw(plan.userId(), initialKrw);
         PaperTradingService.PaperFill fill = "BUY".equals(plan.side())
                 ? buy(plan, price, feeRate) : sell(plan, price, sellQuantity, feeRate);
-        orderRepository.save(plan.userId(), orderPlanId, plan.exchange(), fill);
+        if (!orderRepository.save(plan.userId(), orderPlanId, plan.exchange(), fill)) {
+            throw new IllegalStateException("Paper order idempotency conflict");
+        }
         return fill;
     }
 

@@ -24,15 +24,15 @@ export default function RecommendationPanel() {
   })
   const result = query.data
 
-  return <article className="rounded-xl border border-slate-800 bg-slate-900 p-5" aria-labelledby="recommendations-heading">
-    <h2 className="text-xl font-bold text-white" id="recommendations-heading">추천과 주문 계획</h2>
-    <p className="mt-1 text-sm text-slate-400">추천은 주문과 분리됩니다. 주문 전에는 RiskEngine 검증과 PAPER 모드가 적용됩니다.</p>
-    {query.isPending && <p className="mt-5 text-sm text-slate-400" role="status">추천 데이터를 불러오는 중입니다.</p>}
-    {query.isError && <p className="mt-5 text-sm text-amber-200" role="status">추천 데이터를 불러오지 못했습니다. 시장 데이터 연결 상태를 확인해 주세요.</p>}
-    {result && <div className="mt-5 divide-y divide-slate-800">
-      <div className="py-4"><div className="flex flex-wrap items-baseline justify-between gap-2"><h3 className="font-bold">{result.recommendation.symbol}</h3><span className="text-sm font-bold text-cyan-200">{result.recommendation.signal} · 점수 {result.recommendation.score}</span></div>
-        <p className="mt-2 text-sm text-slate-300">목표 비중 {(result.recommendation.targetWeight * 100).toFixed(0)}% · RSI {result.indicators.rsi.toFixed(1)} · 변동성 {result.indicators.volatilityPercent.toFixed(2)}%</p>
-        <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-slate-400">{result.recommendation.reasons.map((reason) => <li key={reason}>{reason}</li>)}</ul>
+  return <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm" aria-labelledby="recommendations-heading">
+    <h2 className="text-xl font-bold text-slate-950" id="recommendations-heading">추천과 주문 계획</h2>
+    <p className="mt-1 text-sm text-slate-600">추천은 주문과 분리됩니다. 주문 전에는 RiskEngine 검증과 PAPER 모드가 적용됩니다.</p>
+    {query.isPending && <p className="mt-5 text-sm text-slate-600" role="status">추천 데이터를 불러오는 중입니다.</p>}
+    {query.isError && <p className="mt-5 text-sm text-amber-900" role="status">추천 데이터를 불러오지 못했습니다. 시장 데이터 연결 상태를 확인해 주세요.</p>}
+    {result && <div className="mt-5 divide-y divide-slate-200">
+      <div className="py-4"><div className="flex flex-wrap items-baseline justify-between gap-2"><h3 className="font-bold">{result.recommendation.symbol}</h3><span className="text-sm font-bold text-blue-700">{result.recommendation.signal} · 점수 {result.recommendation.score}</span></div>
+        <p className="mt-2 text-sm text-slate-700">목표 비중 {(result.recommendation.targetWeight * 100).toFixed(0)}% · RSI {result.indicators.rsi.toFixed(1)} · 변동성 {result.indicators.volatilityPercent.toFixed(2)}%</p>
+        <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-slate-600">{result.recommendation.reasons.map((reason) => <li key={reason}>{reason}</li>)}</ul>
       </div>
       <div className="py-4 text-xs text-slate-500"><p>데이터: {result.dataSource} · {new Date(result.dataCapturedAt).toLocaleString('ko-KR')} · 일봉 {result.candleCount}개</p><p>계산 시각: {new Date(result.generatedAt).toLocaleString('ko-KR')}</p>
         <ul className="mt-2 list-disc space-y-1 pl-5">{result.limitations.map((limitation) => <li key={limitation}>{limitation}</li>)}</ul>

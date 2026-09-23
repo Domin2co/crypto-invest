@@ -31,7 +31,9 @@ app:
   paper-fee-rate: ${PAPER_FEE_RATE:0.0005}
   trading-mode: ${TRADING_MODE:PAPER}
   live-trading-enabled: ${LIVE_TRADING_ENABLED:false}
+  live-trading-kill-switch: ${LIVE_TRADING_KILL_SWITCH:true}
   live-daily-limit: ${LIVE_DAILY_LIMIT:0}
+  live-max-asset-weight: ${LIVE_MAX_ASSET_WEIGHT:0.35}
   live-trading-confirmation-version: ${LIVE_TRADING_CONFIRMATION_VERSION:2026-09-22}
   live-trading-confirmation-minutes: ${LIVE_TRADING_CONFIRMATION_MINUTES:15}
   upbit-api-base-url: ${UPBIT_API_BASE_URL:https://api.upbit.com}

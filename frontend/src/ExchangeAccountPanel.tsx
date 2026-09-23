@@ -23,15 +23,15 @@ export default function ExchangeAccountPanel({ token }: Props) {
     } catch { setMessage('연동 정보를 저장하지 못했습니다. 입력값과 로그인 상태를 확인해 주세요.') } finally { setBusy(false) }
   }
 
-  return <section className="mt-6 rounded-xl border border-slate-800 bg-slate-900 p-5" aria-labelledby="exchange-account-heading">
-    <h2 className="text-xl font-bold text-white" id="exchange-account-heading">거래소 읽기 전용 연동</h2>
-    <p className="mt-1 text-sm text-slate-400">자산 조회 권한만 가진 키를 사용하세요. 출금 권한은 허용하지 않습니다.</p>
-    {!token ? <p className="mt-4 rounded-lg bg-slate-950 p-3 text-sm text-slate-400">로그인 후 본인 거래소 연동 정보를 저장할 수 있습니다.</p> : <form className="mt-5 grid gap-4 sm:max-w-xl" onSubmit={save}>
-      <label className="grid gap-1 text-sm font-medium">거래소<select className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white" defaultValue="UPBIT" name="exchange"><option value="UPBIT">Upbit</option><option value="BITHUMB">Bithumb</option></select></label>
-      <label className="grid gap-1 text-sm font-medium">접근 키<input className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white" autoComplete="off" maxLength={512} name="accessKey" required type="password" /></label>
-      <label className="grid gap-1 text-sm font-medium">비밀 키<input className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white" autoComplete="off" maxLength={512} name="secretKey" required type="password" /></label>
-      <button className="w-full rounded-lg border border-cyan-400 px-4 py-2.5 font-bold text-cyan-200 disabled:opacity-50 sm:w-fit" disabled={busy} type="submit">암호화 저장</button>
+  return <section className="mt-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm" aria-labelledby="exchange-account-heading">
+    <h2 className="text-xl font-bold text-slate-950" id="exchange-account-heading">거래소 읽기 전용 연동</h2>
+    <p className="mt-1 text-sm text-slate-600">자산 조회 권한만 가진 키를 사용하세요. 출금 권한은 허용하지 않습니다.</p>
+    {!token ? <p className="mt-4 rounded-lg bg-slate-50 p-3 text-sm text-slate-600">로그인 후 본인 거래소 연동 정보를 저장할 수 있습니다.</p> : <form className="mt-5 grid gap-4 sm:max-w-xl" onSubmit={save}>
+      <label className="grid gap-1 text-sm font-medium">거래소<select className="rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-slate-950" defaultValue="UPBIT" name="exchange"><option value="UPBIT">Upbit</option><option value="BITHUMB">Bithumb</option></select></label>
+      <label className="grid gap-1 text-sm font-medium">접근 키<input className="rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-slate-950" autoComplete="off" maxLength={512} name="accessKey" required type="password" /></label>
+      <label className="grid gap-1 text-sm font-medium">비밀 키<input className="rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-slate-950" autoComplete="off" maxLength={512} name="secretKey" required type="password" /></label>
+      <button className="w-full rounded-lg border border-blue-600 px-4 py-2.5 font-bold text-blue-700 disabled:opacity-50 sm:w-fit" disabled={busy} type="submit">암호화 저장</button>
     </form>}
-    {message && <p className="mt-4 text-sm text-cyan-200" role="status">{message}</p>}
+    {message && <p className="mt-4 text-sm text-blue-700" role="status">{message}</p>}
   </section>
 }

@@ -9,7 +9,7 @@ public final class RiskEngine {
         if (policy.killSwitch()) return "KILL_SWITCH";
         if (plan.amount() == null || plan.amount().compareTo(policy.minOrderAmount()) < 0) return "MIN_ORDER_AMOUNT";
         if (plan.amount().compareTo(policy.maxOrderAmount()) > 0) return "MAX_ORDER_AMOUNT";
-        if (plan.projectedWeight().compareTo(policy.maxAssetWeight()) > 0) return "MAX_ASSET_WEIGHT";
+        if ("BUY".equals(plan.side()) && plan.projectedWeight().compareTo(policy.maxAssetWeight()) > 0) return "MAX_ASSET_WEIGHT";
         return null;
     }
 }

@@ -68,7 +68,12 @@ public class CredentialCipher {
         if (encodedKey == null || encodedKey.isBlank()) {
             throw new IllegalStateException("CREDENTIAL_ENCRYPTION_KEY is required for credential operations");
         }
-        byte[] decoded = decode(encodedKey);
+        byte[] decoded;
+        try {
+            decoded = Base64.getDecoder().decode(encodedKey);
+        } catch (IllegalArgumentException exception) {
+            decoded = Base64.getUrlDecoder().decode(encodedKey);
+        }
         if (decoded.length != AES_256_KEY_BYTES) {
             throw new IllegalStateException("CREDENTIAL_ENCRYPTION_KEY must be base64-encoded 256-bit key");
         }

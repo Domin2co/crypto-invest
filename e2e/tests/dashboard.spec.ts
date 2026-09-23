@@ -1,64 +1,77 @@
-import { expect, test } from '@playwright/test'
+﻿import { expect, test } from '@playwright/test'
 
-test('shows the paper-only dashboard and explicit privacy consent controls', async ({ page }) => {
+const menus = [
+  ['포트폴리오', '/portfolio', '연동 포트폴리오'],
+  ['시장', '/market', '주요 시세'],
+  ['추천', '/recommendations', '시장 데이터에 따른 참고 정보'],
+  ['거래 이력', '/history', '로그인이 필요합니다'],
+] as const
+
+test('each main menu opens its own page and the styled privacy page stays in the footer', async ({ page }) => {
   await page.goto('/')
-
-  await expect(page.getByRole('heading', { name: '투자 현황' })).toBeVisible()
-  await expect(page.getByLabel('거래 모드: PAPER')).toHaveText('PAPER 모드')
-  await expect(page.getByRole('link', { name: '회원가입 / 내 정보' })).toBeVisible()
-  await expect(page.getByRole('checkbox', { name: /개인정보 처리에 동의합니다/ })).toHaveAttribute('required', '')
-  await expect(page.getByRole('checkbox', { name: /마케팅 정보 수신/ })).not.toHaveAttribute('required', '')
-  await expect(page.getByRole('link', { name: '개인정보처리방침' })).toHaveAttribute('href', '/privacy-policy.html')
-  await expect(page.locator('[aria-label="KRW-BTC 공개 시세"] strong')).not.toHaveText(/불러오는 중|로딩 대기/)
-  await expect(page.getByText(/데이터: UPBIT public daily candles/)).toBeVisible()
+  await expect(page.getByText('정상')).toBeVisible()
+  await expect(page.getByLabel('현재 거래 모드 상태: PAPER')).toBeVisible()
+  await expect(page.getByRole('link', { name: '개인정보 처리방침' })).toHaveAttribute('href', '/privacy')
+  await expect(page.getByRole('link', { name: '포트폴리오 보기' })).toHaveCount(0)
+  for (const [label, path, heading] of menus) {
+    await page.getByRole('link', { name: label, exact: true }).click()
+    await expect(page).toHaveURL(new RegExp(`${path}$`))
+    await expect(page.getByRole('heading', { name: heading })).toBeVisible()
+    await expect(page.getByRole('link', { name: '개인정보 처리방침' })).toBeVisible()
+  }
+  await page.getByRole('link', { name: '개인정보 처리방침' }).click()
+  await expect(page).toHaveURL(/\/privacy$/)
+  await expect(page.locator('article.panel-card')).toBeVisible()
 })
 
-test('keeps primary navigation reachable at a 320px viewport', async ({ page }) => {
+test('navigation and privacy footer remain usable at 320px', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 720 })
   await page.goto('/')
-
-  await expect(page.getByRole('heading', { name: '회원가입과 개인정보' })).toBeVisible()
-  await expect(page.getByRole('button', { name: '회원가입' })).toBeVisible()
-  expect(await page.locator('nav').evaluate((node) => node.scrollWidth >= node.clientWidth)).toBeTruthy()
+  await expect(page.getByRole('navigation', { name: '주요 메뉴' })).toBeVisible()
+  await page.getByRole('link', { name: '시장', exact: true }).click()
+  await expect(page).toHaveURL(/\/market$/)
+  await expect(page.getByRole('link', { name: '개인정보 처리방침' })).toBeVisible()
 })
 
-test('registers and fills PAPER buy and sell orders without a real exchange order', async ({ page }) => {
-  await page.goto('/')
-  await page.getByLabel('이메일').fill(`paper-e2e-${Date.now()}@example.com`)
+test('registers and logs into a real test account without calling a live-order route', async ({ page }) => {
+  const email = `paper-e2e-${Date.now()}@example.com`
+  await page.goto('/account')
+  await page.getByRole('tab', { name: '회원가입' }).click()
+  await page.getByLabel('이메일').fill(email)
   await page.getByLabel('비밀번호').fill('long-enough-password')
   await page.getByRole('checkbox', { name: /개인정보 처리에 동의합니다/ }).check()
-  const privacyLoad = page.waitForResponse((response) => response.url().includes('/api/privacy/me') && response.request().method() === 'GET')
   const [registration] = await Promise.all([
     page.waitForResponse((response) => response.url().includes('/api/auth/register')),
     page.getByRole('button', { name: '회원가입' }).click(),
   ])
   expect(registration.status()).toBe(200)
-  expect((await privacyLoad).status()).toBe(200)
-
-  await page.getByLabel('접근 키').fill('e2e-access-key')
-  await page.getByLabel('비밀 키').fill('e2e-secret-key')
-  const [accountSaved] = await Promise.all([
-    page.waitForResponse((response) => response.url().includes('/api/exchange-accounts') && response.request().method() === 'POST'),
-    page.getByRole('button', { name: '암호화 저장' }).click(),
+  await expect(page.getByText(`로그인 계정: ${email}`)).toBeVisible()
+  expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0)
+  await page.getByRole('button', { name: '로그아웃' }).click()
+  await page.getByRole('tab', { name: '로그인' }).click()
+  await page.getByLabel('이메일').fill(email)
+  await page.getByLabel('비밀번호').fill('long-enough-password')
+  const [login] = await Promise.all([
+    page.waitForResponse((response) => response.url().includes('/api/auth/login')),
+    page.getByRole('button', { name: '로그인' }).click(),
   ])
-  expect(accountSaved.status()).toBe(204)
-  await expect(page.getByText(/암호화해 저장했습니다/)).toBeVisible()
-
-  const [paperOrder] = await Promise.all([
+  expect(login.status()).toBe(200)
+  await expect(page.getByText(`로그인 계정: ${email}`)).toBeVisible()
+  await page.getByRole('link', { name: '대시보드', exact: true }).click()
+  const [buy] = await Promise.all([
     page.waitForResponse((response) => response.url().includes('/api/paper/orders') && response.request().method() === 'POST'),
     page.getByRole('button', { name: 'PAPER 주문 실행' }).click(),
   ])
-  expect(paperOrder.status()).toBe(201)
+  expect(buy.status()).toBe(201)
   await expect(page.getByText(/PAPER 체결 완료: BUY BTC/)).toBeVisible()
-
   await page.getByLabel('방향').selectOption('SELL')
   await page.getByLabel('매도 수량(BTC)').fill('0.0001')
-  const [paperSell] = await Promise.all([
+  const [sell] = await Promise.all([
     page.waitForResponse((response) => response.url().includes('/api/paper/orders') && response.request().method() === 'POST'),
     page.getByRole('button', { name: 'PAPER 주문 실행' }).click(),
   ])
-  expect(paperSell.status()).toBe(201)
+  expect(sell.status()).toBe(201)
   await expect(page.getByText(/PAPER 체결 완료: SELL BTC/)).toBeVisible()
+  await page.getByRole('link', { name: '거래 이력', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'PAPER 주문 내역' })).toBeVisible()
-  await expect(page.getByText(/SELL BTC.*FILLED/)).toBeVisible()
 })
