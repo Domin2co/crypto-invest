@@ -4,31 +4,29 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.cryptoinvest.security.AppTokenService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
-import com.cryptoinvest.security.AppTokenService;
 
 @WebMvcTest(HealthController.class)
 @AutoConfigureMockMvc(addFilters = false)
-@TestPropertySource(properties = "app.trading-mode=PAPER")
+@TestPropertySource(properties = {"app.live-trading-enabled=false", "app.live-trading-kill-switch=true", "app.live-daily-limit=0"})
 class HealthControllerTest {
-
-    @Autowired
-    private MockMvc mockMvc;
-
-    @MockitoBean
-    private AppTokenService tokenService;
+    @Autowired MockMvc mockMvc;
+    @MockitoBean AppTokenService tokenService;
+    @MockitoBean com.cryptoinvest.security.UserAuthRepository users;
 
     @Test
-    void returnsPaperModeHealthStatus() throws Exception {
+    void reportsSystemHealthAndLiveOrderLockWithoutGlobalTradingMode() throws Exception {
         mockMvc.perform(get("/api/health"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("UP"))
-                .andExpect(jsonPath("$.tradingMode").value("PAPER"));
+                .andExpect(jsonPath("$.liveOrderSubmissionEnabled").value(false))
+                .andExpect(jsonPath("$.tradingMode").doesNotExist());
     }
 }

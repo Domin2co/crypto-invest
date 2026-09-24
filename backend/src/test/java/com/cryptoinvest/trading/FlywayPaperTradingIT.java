@@ -9,12 +9,15 @@ import com.cryptoinvest.risk.RiskPolicy;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
+import java.time.YearMonth;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /** 실제 PostgreSQL에서 Flyway와 PAPER 체결 transaction을 검증한다. */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE, properties = "app.auth-token-secret=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")
@@ -26,7 +29,31 @@ class FlywayPaperTradingIT {
     @Autowired PortfolioTargetRepository portfolioTargets;
     @Autowired PaperOrderPlanRepository paperPlans;
     @Autowired PaperOrderAuditRepository paperOrders;
+    @Autowired PaperLeagueRepository paperLeague;
+    @Autowired PaperLeagueService paperLeagueService;
+    @Autowired com.cryptoinvest.security.UserConsentRepository consents;
+    @Autowired PaperWalletRepository paperWallets;
+    @Autowired PlatformTransactionManager transactionManager;
 
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void monthlyBoundaryLockSerializesInstancesPerMonthAndOperation() {
+        YearMonth month = YearMonth.of(2026, 10);
+        TransactionTemplate first = new TransactionTemplate(transactionManager);
+        TransactionTemplate concurrent = new TransactionTemplate(transactionManager);
+        concurrent.setPropagationBehavior(Propagation.REQUIRES_NEW.value());
+
+        first.execute(status -> {
+            assertThat(paperLeague.tryBoundaryLock(month, "open")).isTrue();
+            boolean duplicateOpen = concurrent.execute(inner -> paperLeague.tryBoundaryLock(month, "open"));
+            assertThat(duplicateOpen).isFalse();
+            boolean separateClose = concurrent.execute(inner -> paperLeague.tryBoundaryLock(month, "close"));
+            assertThat(separateClose).isTrue();
+            return null;
+        });
+        boolean releasedAfterCommit = concurrent.execute(status -> paperLeague.tryBoundaryLock(month, "open"));
+        assertThat(releasedAfterCommit).isTrue();
+    }
     @Test
     void migratesCommentedSchemaAndPersistsOnePaperFill() {
         UUID userId = UUID.randomUUID();
@@ -77,6 +104,22 @@ class FlywayPaperTradingIT {
     }
 
     @Test
+    void persistsMarketablePaperLimitPriceAndOrderType() {
+        UUID userId = UUID.randomUUID();
+        String key = "limit-" + UUID.randomUUID();
+        jdbcTemplate.update("INSERT INTO app_user (id, email, password_hash) VALUES (?, ?, 'hash')", userId, key + "@example.com");
+        OrderPlan plan = new OrderPlan(userId, Exchange.UPBIT, "BTC", "BUY", new BigDecimal("10000"), BigDecimal.ZERO, key);
+        BigDecimal limitPrice = new BigDecimal("1200");
+        UUID planId = paperPlans.createOrFind(plan, null, "LIMIT", limitPrice).orElseThrow();
+        paperTrading.execute(planId, plan, new BigDecimal("1000"), null, BigDecimal.ZERO,
+                new RiskPolicy(false, BigDecimal.ONE, new BigDecimal("20000"), BigDecimal.ONE), "LIMIT", limitPrice);
+
+        assertThat(jdbcTemplate.queryForObject("SELECT limit_price FROM order_plan WHERE id = ?", BigDecimal.class, planId)).isEqualByComparingTo(limitPrice);
+        assertThat(jdbcTemplate.queryForObject("SELECT limit_price FROM trade_order WHERE order_plan_id = ?", BigDecimal.class, planId)).isEqualByComparingTo(limitPrice);
+        assertThat(jdbcTemplate.queryForObject("SELECT order_type FROM trade_order WHERE order_plan_id = ?", String.class, planId)).isEqualTo("LIMIT");
+    }
+
+    @Test
     void scopesIdempotencyLookupsAndPlansToTheirOwner() {
         UUID ownerId = UUID.randomUUID();
         UUID otherUserId = UUID.randomUUID();
@@ -91,12 +134,12 @@ class FlywayPaperTradingIT {
 
         PaperTradingService.PaperFill fill = new PaperTradingService.PaperFill(
                 "BTC", "BUY", new BigDecimal("0.01"), new BigDecimal("10000"), BigDecimal.ZERO, "FILLED", key);
-        assertThat(paperOrders.save(ownerId, ownerPlanId, Exchange.UPBIT, fill)).isTrue();
+        assertThat(paperOrders.save(ownerId, ownerPlanId, Exchange.UPBIT, fill, new BigDecimal("1000"))).isTrue();
         PaperTradingService.PaperFill persisted = paperOrders.findByUserAndIdempotencyKey(ownerId, key).orElseThrow();
         assertThat(persisted.symbol()).isEqualTo("BTC");
         assertThat(persisted.quantity()).isEqualByComparingTo("0.01");
         assertThat(paperOrders.findByUserAndIdempotencyKey(otherUserId, key)).isEmpty();
-        assertThat(paperOrders.save(otherUserId, ownerPlanId, Exchange.UPBIT, fill)).isFalse();
+        assertThat(paperOrders.save(otherUserId, ownerPlanId, Exchange.UPBIT, fill, new BigDecimal("1000"))).isFalse();
     }
 
     @Test
@@ -114,7 +157,7 @@ class FlywayPaperTradingIT {
             planId = ownerPlanId;
             PaperTradingService.PaperFill existingFill = new PaperTradingService.PaperFill(
                     "BTC", "BUY", new BigDecimal("0.01"), new BigDecimal("10000"), BigDecimal.ZERO, "FILLED", key);
-            assertThat(paperOrders.save(ownerId, ownerPlanId, Exchange.UPBIT, existingFill)).isTrue();
+            assertThat(paperOrders.save(ownerId, ownerPlanId, Exchange.UPBIT, existingFill, new BigDecimal("1000"))).isTrue();
 
             OrderPlan otherPlan = new OrderPlan(otherUserId, Exchange.UPBIT, "ETH", "BUY", new BigDecimal("10000"), BigDecimal.ZERO, key);
             assertThatThrownBy(() -> paperTrading.execute(ownerPlanId, otherPlan, new BigDecimal("1000"), null,
@@ -130,5 +173,33 @@ class FlywayPaperTradingIT {
             if (planId != null) jdbcTemplate.update("DELETE FROM order_plan WHERE id = ?", planId);
             jdbcTemplate.update("DELETE FROM app_user WHERE id IN (?, ?)", ownerId, otherUserId);
         }
+    }
+    @Test
+    void closesMonthlyLeagueWithKrwPaperWalletsAndAwardsOnlyTopThree() {
+        YearMonth month = paperLeagueService.currentMonth().minusMonths(1);
+        UUID[] users = new UUID[4];
+        String[] nicknames = {"LeagueA", "LeagueB", "LeagueC", "LeagueD"};
+        String[] balances = {"1400000", "1200000", "1100000", "900000"};
+        for (int i = 0; i < users.length; i++) {
+            users[i] = UUID.randomUUID();
+            jdbcTemplate.update("INSERT INTO app_user (id, email, password_hash, nickname) VALUES (?, ?, 'hash', ?)", users[i], users[i] + "@example.com", nicknames[i]);
+            consents.grant(users[i], "PAPER_LEADERBOARD", "test-v1");
+            paperLeague.enroll(users[i], month);
+            paperWallets.initializeKrw(users[i], Exchange.UPBIT, new BigDecimal("1000000"));
+            paperWallets.initializeKrw(users[i], Exchange.BITHUMB, new BigDecimal("1000000"));
+            String key = "league-" + UUID.randomUUID();
+            UUID planId = UUID.randomUUID();
+            jdbcTemplate.update("INSERT INTO order_plan (id, user_id, exchange, symbol, side, order_type, requested_amount, status, idempotency_key) VALUES (?, ?, 'UPBIT', 'BTC', 'BUY', 'MARKET', 10000, 'ACCEPTED', ?)", planId, users[i], key);
+            jdbcTemplate.update("INSERT INTO trade_order (id, user_id, order_plan_id, exchange, trading_mode, symbol, side, order_type, requested_amount, status, idempotency_key, created_at) VALUES (?, ?, ?, 'UPBIT', 'PAPER', 'BTC', 'BUY', 'MARKET', 10000, 'FILLED', ?, ?)", UUID.randomUUID(), users[i], planId, key, month.atDay(15).atStartOfDay(PaperLeagueService.ZONE).toOffsetDateTime());
+        }
+        paperLeagueService.openMonth(month);
+        for (int i = 0; i < users.length; i++) jdbcTemplate.update("UPDATE paper_wallet SET available_amount = ? WHERE user_id = ? AND exchange = 'UPBIT' AND currency = 'KRW'", new BigDecimal(balances[i]), users[i]);
+        paperLeagueService.closeMonth(month);
+        var board = paperLeagueService.board(month);
+        assertThat(board.status()).isEqualTo("CLOSED");
+        assertThat(board.standings()).extracting(PaperLeagueService.Standing::nickname).containsExactly("LeagueA", "LeagueB", "LeagueC", "LeagueD");
+        assertThat(board.standings()).extracting(PaperLeagueService.Standing::place).containsExactly(1, 2, 3, 4);
+        assertThat(board.standings()).extracting(PaperLeagueService.Standing::badge).containsExactly("GOLD", "SILVER", "BRONZE", null);
+        assertThat(board.standings()).allSatisfy(row -> assertThat(row.tradeCount()).isEqualTo(1));
     }
 }

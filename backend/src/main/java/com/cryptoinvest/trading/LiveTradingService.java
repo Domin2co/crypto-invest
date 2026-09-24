@@ -40,7 +40,9 @@ public class LiveTradingService {
                 .map(order -> needsRecovery(order) ? recover(order, enabledCredentials(userId, order.exchange())) : order);
     }
 
-    public LiveOrder execute(UUID orderPlanId, OrderPlan plan, BigDecimal sellQuantity, RiskPolicy policy) {
+    public LiveOrder execute(UUID orderPlanId, OrderPlan plan, BigDecimal sellQuantity, RiskPolicy policy) { return execute(orderPlanId, plan, sellQuantity, policy, "MARKET", null); }
+
+    public LiveOrder execute(UUID orderPlanId, OrderPlan plan, BigDecimal quantity, RiskPolicy policy, String orderType, BigDecimal limitPrice) {
         Optional<LiveOrder> existing = orders.findByUserAndIdempotencyKey(plan.userId(), plan.idempotencyKey());
         if (existing.isPresent()) {
             LiveOrder order = existing.get();
@@ -51,9 +53,10 @@ public class LiveTradingService {
         guard.requireAllowed(plan, policy, orders.submittedAmountToday(plan.userId()));
         ExchangeCredentials account = enabledCredentials(plan.userId(), plan.exchange());
         String clientOrderId = clientOrderId(plan.idempotencyKey());
-        LiveOrder submitted = orders.createSubmitted(orderPlanId, plan, sellQuantity, clientOrderId);
+        LiveOrder submitted = "LIMIT".equals(orderType) ? orders.createSubmitted(orderPlanId, plan, quantity, clientOrderId, orderType, limitPrice) : orders.createSubmitted(orderPlanId, plan, quantity, clientOrderId);
         try {
-            return orders.update(submitted, client.submit(plan, sellQuantity, clientOrderId, account));
+            LiveOrder result = "LIMIT".equals(orderType) ? client.submit(plan, quantity, clientOrderId, account, orderType, limitPrice) : client.submit(plan, quantity, clientOrderId, account);
+            return orders.update(submitted, result);
         } catch (LiveOrderUnknownResultException exception) {
             return recover(submitted, account);
         } catch (ExchangeApiException exception) {

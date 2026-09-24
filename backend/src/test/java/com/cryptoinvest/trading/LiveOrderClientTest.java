@@ -25,6 +25,26 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 class LiveOrderClientTest {
+    @Test void submitsUpbitAndBithumbLimitOrdersWithImmediateOrCancel() throws Exception {
+        AtomicReference<String> upbitBody = new AtomicReference<>();
+        AtomicReference<String> bithumbBody = new AtomicReference<>();
+        HttpServer server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/v1/orders", exchange -> { upbitBody.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8)); respond(exchange, 201, "{\"uuid\":\"upbit-order\",\"state\":\"cancel\"}"); });
+        server.createContext("/v2/orders", exchange -> { bithumbBody.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8)); respond(exchange, 201, "{\"order_id\":\"bithumb-order\",\"state\":\"cancel\"}"); });
+        server.start();
+        try {
+            String baseUrl = "http://127.0.0.1:" + server.getAddress().getPort();
+            LiveOrderClient client = new LiveOrderClient(new ObjectMapper(), new JwtSigner(), HttpClient.newHttpClient(), baseUrl, baseUrl);
+            ExchangeCredentials credentials = new ExchangeCredentials("access", "secret");
+            BigDecimal quantity = new BigDecimal("0.0005");
+            BigDecimal price = new BigDecimal("20000000");
+            client.submit(new OrderPlan(UUID.randomUUID(), Exchange.UPBIT, "KRW-BTC", "BUY", new BigDecimal("10000"), BigDecimal.ONE, "upbit-limit-key"), quantity, "upbit-client", credentials, "LIMIT", price);
+            client.submit(new OrderPlan(UUID.randomUUID(), Exchange.BITHUMB, "KRW-BTC", "SELL", new BigDecimal("10000"), BigDecimal.ONE, "bithumb-limit-key"), quantity, "bithumb-client", credentials, "LIMIT", price);
+
+            assertThat(upbitBody.get()).isEqualTo("{\"market\":\"KRW-BTC\",\"side\":\"bid\",\"ord_type\":\"limit\",\"price\":\"20000000\",\"volume\":\"0.0005\",\"time_in_force\":\"ioc\",\"identifier\":\"upbit-client\"}");
+            assertThat(bithumbBody.get()).isEqualTo("{\"market\":\"KRW-BTC\",\"side\":\"ask\",\"order_type\":\"limit\",\"price\":\"20000000\",\"volume\":\"0.0005\",\"time_in_force\":\"ioc\",\"client_order_id\":\"bithumb-client\"}");
+        } finally { server.stop(0); }
+    }
     @Test void signsTheSameOrderedFieldsThatItSendsAndUsesClientIdForRecovery() throws Exception {
         AtomicReference<String> body = new AtomicReference<>();
         AtomicReference<String> queryHash = new AtomicReference<>();

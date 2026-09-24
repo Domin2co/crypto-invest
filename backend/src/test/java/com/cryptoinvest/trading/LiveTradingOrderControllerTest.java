@@ -36,7 +36,7 @@ class LiveTradingOrderControllerTest {
     private final Authentication authentication = authentication(userId);
     private LiveTradingOrderController controller() {
         when(market.exchange()).thenReturn(Exchange.UPBIT);
-        return new LiveTradingOrderController(trading, accounts, portfolios, plans, List.of(market), new BigDecimal("0.35"));
+        return new LiveTradingOrderController(trading, accounts, portfolios, plans, mock(LiveOrderRepository.class), List.of(market), new BigDecimal("0.35"));
     }
     private final String idem = "e2e-live-order-key-0001";
 
@@ -95,6 +95,33 @@ class LiveTradingOrderControllerTest {
         verify(trading, never()).execute(any(), any(), any(), any());
     }
 
+    @Test void validatesAndRoutesIocLimitOrderThroughRiskCheckedLiveService() {
+        LiveTradingOrderController controller = controller();
+        BigDecimal limitPrice = new BigDecimal("20000000");
+        BigDecimal quantity = new BigDecimal("0.000500000000000000");
+        when(trading.recoverExisting(userId, idem)).thenReturn(Optional.empty());
+        when(market.getPrice("KRW-BTC")).thenReturn(new MarketPrice(Exchange.UPBIT, "KRW-BTC", limitPrice, BigDecimal.ONE, Instant.now()));
+        when(accounts.getOrderChance(userId, Exchange.UPBIT, "KRW-BTC")).thenReturn(chance("25000", "0.2"));
+        when(portfolios.read(userId, Exchange.UPBIT)).thenReturn(new PortfolioReadService.PortfolioView(Exchange.UPBIT,
+                new BigDecimal("100000"), new BigDecimal("0.8"), List.of(
+                        new PortfolioReadService.Position("KRW", new BigDecimal("80000"), BigDecimal.ZERO, BigDecimal.ONE,
+                                new BigDecimal("80000"), new BigDecimal("0.8"), null, null),
+                        new PortfolioReadService.Position("BTC", new BigDecimal("0.001"), new BigDecimal("10000000"),
+                                limitPrice, new BigDecimal("20000"), new BigDecimal("0.2"), null, null)), Instant.now()));
+        UUID planId = UUID.randomUUID();
+        when(plans.createOrFind(any(), any(), any(), any())).thenReturn(Optional.of(planId));
+        LiveOrder order = new LiveOrder(UUID.randomUUID(), Exchange.UPBIT, "client-order", "exchange-order", "FILLED",
+                quantity, new BigDecimal("10000"), BigDecimal.ONE, true);
+        when(trading.execute(eq(planId), any(), eq(quantity), any(), eq("LIMIT"), eq(limitPrice))).thenReturn(order);
+
+        var response = controller.execute(authentication, new LiveTradingOrderController.LiveOrderRequest(
+                Exchange.UPBIT, "KRW-BTC", "BUY", new BigDecimal("10000"), null, idem, "LIMIT", limitPrice));
+
+        assertThat(response.getStatusCode().value()).isEqualTo(201);
+        assertThat(response.getBody().order()).isEqualTo(order);
+        verify(plans).createOrFind(any(), eq(quantity), eq("LIMIT"), eq(limitPrice));
+        verify(trading).execute(eq(planId), any(), eq(quantity), any(), eq("LIMIT"), eq(limitPrice));
+    }
     private static ExchangeOrderChance chance(String quote, String base) {
         return new ExchangeOrderChance("KRW-BTC", "active", "KRW", "BTC", new BigDecimal(quote), new BigDecimal(base),
                 new BigDecimal("5000"), new BigDecimal("5000"), new BigDecimal("1000000"), new BigDecimal("0.0005"), new BigDecimal("0.0005"));

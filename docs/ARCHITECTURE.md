@@ -160,3 +160,12 @@ Infrastructure Adapter
 - 내부 Model은 거래소에 독립적이어야 함
 - 추천 결과와 주문 요청은 별도 Model 사용
 - Order Execution 전에 Risk 검증 필수
+
+### market discussion
+
+- 종목 기호별 게시글 API와 저장소를 기존 `market` 모듈에 둔다.
+- 읽기는 공개하고 쓰기는 Bearer 인증 및 닉네임 설정 게이트를 적용한다.
+- 공개 응답은 닉네임·본문·시각만 포함하며 작성자 이메일과 내부 계정 ID를 포함하지 않는다.
+## Login reload and discussion moderation
+
+The SPA restores its bearer token from tab-scoped `sessionStorage` on startup and hydrates account role/nickname through `/api/account/profile`. The backend uses stateless bearer authentication; the token expires after eight hours and logout clears the tab copy. Discussion comments have a dedicated ten-item page API. Post/comment changes are scoped to the authenticated author, while an ADMIN role check protects report listing and hide/dismiss/restore actions.

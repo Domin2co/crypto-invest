@@ -15,6 +15,6 @@ class PaperOrderAuditRepositoryTest {
         JdbcTemplate jdbc = mock(JdbcTemplate.class);
         when(jdbc.update(any(String.class), any(Object[].class))).thenReturn(1);
         assertThat(new PaperOrderAuditRepository(jdbc).save(UUID.randomUUID(), UUID.randomUUID(), Exchange.UPBIT,
-                new PaperTradingService.PaperFill("BTC", "BUY", BigDecimal.ONE, new BigDecimal("10000"), new BigDecimal("10"), "FILLED", "key"))).isTrue();
+                new PaperTradingService.PaperFill("BTC", "BUY", BigDecimal.ONE, new BigDecimal("10000"), new BigDecimal("10"), "FILLED", "key"), new BigDecimal("1000"))).isTrue();
     }
 }

@@ -23,6 +23,11 @@ public class AuthService {
         if (marketingAccepted) consents.grant(userId, "MARKETING", policyVersion);
         return tokens.issue(userId);
     }
+    public void changePassword(java.util.UUID userId, String currentPassword, String newPassword) {
+        var user = users.findEnabledById(userId).filter(value -> passwordEncoder.matches(currentPassword, value.passwordHash()))
+                .orElseThrow(() -> new IllegalArgumentException("Invalid credentials"));
+        users.updatePassword(user.id(), passwordEncoder.encode(newPassword));
+    }
     public String login(String email, String password) {
         var user = users.findEnabledByEmail(email).filter(value -> passwordEncoder.matches(password, value.passwordHash()))
                 .orElseThrow(() -> new IllegalArgumentException("Invalid credentials"));

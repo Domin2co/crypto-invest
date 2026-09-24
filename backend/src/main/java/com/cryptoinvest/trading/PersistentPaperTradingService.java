@@ -26,17 +26,25 @@ public class PersistentPaperTradingService {
     /** plan은 RiskEngine을 통과해야 하며, SELL에는 매도 수량이 필요하다. */
     @Transactional
     public synchronized PaperTradingService.PaperFill execute(UUID orderPlanId, OrderPlan plan, BigDecimal price,
-            BigDecimal sellQuantity, BigDecimal feeRate, RiskPolicy policy) {
+            BigDecimal sellQuantity, BigDecimal feeRate, RiskPolicy policy) { return execute(orderPlanId, plan, price, sellQuantity, feeRate, policy, "MARKET", null); }
+
+    @Transactional
+    public synchronized PaperTradingService.PaperFill execute(UUID orderPlanId, OrderPlan plan, BigDecimal price,
+            BigDecimal sellQuantity, BigDecimal feeRate, RiskPolicy policy, String orderType) { return execute(orderPlanId, plan, price, sellQuantity, feeRate, policy, orderType, null); }
+
+    @Transactional
+    public synchronized PaperTradingService.PaperFill execute(UUID orderPlanId, OrderPlan plan, BigDecimal price,
+            BigDecimal sellQuantity, BigDecimal feeRate, RiskPolicy policy, String orderType, BigDecimal limitPrice) {
         var existing = orderRepository.findByUserAndIdempotencyKey(plan.userId(), plan.idempotencyKey());
         if (existing.isPresent()) return existing.get();
         String reason = RiskEngine.rejectReason(plan, policy);
         if (reason != null) throw new IllegalStateException("Paper order rejected: " + reason);
         if (price == null || price.signum() <= 0 || feeRate == null || feeRate.signum() < 0) throw new IllegalArgumentException("Invalid paper price or fee");
 
-        walletRepository.initializeKrw(plan.userId(), initialKrw);
+        walletRepository.initializeKrw(plan.userId(), plan.exchange(), initialKrw);
         PaperTradingService.PaperFill fill = "BUY".equals(plan.side())
                 ? buy(plan, price, feeRate) : sell(plan, price, sellQuantity, feeRate);
-        if (!orderRepository.save(plan.userId(), orderPlanId, plan.exchange(), fill)) {
+        if (!orderRepository.save(plan.userId(), orderPlanId, plan.exchange(), fill, price, orderType, limitPrice)) {
             throw new IllegalStateException("Paper order idempotency conflict");
         }
         return fill;
@@ -44,9 +52,9 @@ public class PersistentPaperTradingService {
 
     private PaperTradingService.PaperFill buy(OrderPlan plan, BigDecimal price, BigDecimal feeRate) {
         BigDecimal fee = plan.amount().multiply(feeRate);
-        walletRepository.subtract(plan.userId(), "KRW", plan.amount().add(fee));
+        walletRepository.subtract(plan.userId(), plan.exchange(), "KRW", plan.amount().add(fee));
         BigDecimal quantity = plan.amount().divide(price, 18, RoundingMode.DOWN);
-        walletRepository.add(plan.userId(), plan.symbol(), quantity);
+        walletRepository.add(plan.userId(), plan.exchange(), plan.symbol(), quantity);
         return new PaperTradingService.PaperFill(plan.symbol(), "BUY", quantity, plan.amount(), fee, "FILLED", plan.idempotencyKey());
     }
 
@@ -54,9 +62,9 @@ public class PersistentPaperTradingService {
         if (quantity == null || quantity.signum() <= 0) throw new IllegalArgumentException("Sell quantity is required");
         BigDecimal amount = quantity.multiply(price);
         BigDecimal fee = amount.multiply(feeRate);
-        walletRepository.balanceForUpdate(plan.userId(), plan.symbol());
-        walletRepository.subtract(plan.userId(), plan.symbol(), quantity);
-        walletRepository.add(plan.userId(), "KRW", amount.subtract(fee));
+        walletRepository.balanceForUpdate(plan.userId(), plan.exchange(), plan.symbol());
+        walletRepository.subtract(plan.userId(), plan.exchange(), plan.symbol(), quantity);
+        walletRepository.add(plan.userId(), plan.exchange(), "KRW", amount.subtract(fee));
         return new PaperTradingService.PaperFill(plan.symbol(), "SELL", quantity, amount, fee, "FILLED", plan.idempotencyKey());
     }
 }

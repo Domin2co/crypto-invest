@@ -34,3 +34,6 @@ Thumbs.db
 
 # PDF guide build scratch
 tmp/pdfs/
+
+# Generated local testing guide artifacts
+output/pdf/

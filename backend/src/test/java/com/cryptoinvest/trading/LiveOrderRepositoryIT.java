@@ -25,16 +25,18 @@ class LiveOrderRepositoryIT {
         jdbcTemplate.update("INSERT INTO app_user (id, email, password_hash) VALUES (?, ?, ?)",
                 userId, key + "@example.com", "hash");
         jdbcTemplate.update("""
-                INSERT INTO order_plan (id, user_id, exchange, symbol, side, order_type, requested_amount, status, idempotency_key)
-                VALUES (?, ?, 'UPBIT', 'KRW-BTC', 'BUY', 'MARKET', 10000, 'ACCEPTED', ?)
+                INSERT INTO order_plan (id, user_id, exchange, symbol, side, order_type, requested_amount, limit_price, status, idempotency_key)
+                VALUES (?, ?, 'UPBIT', 'KRW-BTC', 'BUY', 'LIMIT', 10000, 20000000, 'ACCEPTED', ?)
                 """, planId, userId, key);
 
         try {
             OrderPlan plan = new OrderPlan(userId, Exchange.UPBIT, "KRW-BTC", "BUY", new BigDecimal("10000"),
                     new BigDecimal("0.1"), key);
-            LiveOrder submitted = orders.createSubmitted(planId, plan, new BigDecimal("0.1"), clientOrderId);
+            LiveOrder submitted = orders.createSubmitted(planId, plan, new BigDecimal("0.0005"), clientOrderId, "LIMIT", new BigDecimal("20000000"));
 
             assertThat(submitted.status()).isEqualTo("SUBMITTED");
+            assertThat(jdbcTemplate.queryForObject("SELECT order_type FROM trade_order WHERE idempotency_key = ?", String.class, key)).isEqualTo("LIMIT");
+            assertThat(jdbcTemplate.queryForObject("SELECT limit_price FROM trade_order WHERE idempotency_key = ?", BigDecimal.class, key)).isEqualByComparingTo("20000000");
             assertThat(jdbcTemplate.queryForObject("SELECT status FROM trade_order WHERE idempotency_key = ?", String.class, key))
                     .isEqualTo("SUBMITTED");
             LiveOrder partial = new LiveOrder(submitted.id(), Exchange.UPBIT, clientOrderId, "exchange-id",

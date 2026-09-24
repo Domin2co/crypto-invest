@@ -26,10 +26,15 @@ public class MarketController {
         return client(exchange).getPrice(market);
     }
 
-    @GetMapping("/{exchange}/candles/days")
-    public List<MarketCandle> dailyCandles(@PathVariable Exchange exchange, @RequestParam String market,
-            @RequestParam(defaultValue = "1") int count) {
-        return client(exchange).getDailyCandles(market, count);
+    @GetMapping("/{exchange}/candles")
+    public List<MarketCandle> candles(@PathVariable Exchange exchange, @RequestParam String market,
+            @RequestParam(defaultValue = "1d") String interval, @RequestParam(defaultValue = "30") int count) {
+        return client(exchange).getCandles(market, interval, count);
+    }
+
+    @GetMapping("/{exchange}/markets")
+    public List<MarketListing> markets(@PathVariable Exchange exchange) {
+        return client(exchange).getMarkets();
     }
 
     private ExchangePublicClient client(Exchange exchange) {

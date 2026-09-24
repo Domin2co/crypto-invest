@@ -20,6 +20,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
 
 /** 인증한 사용자 ID로만 거래소 자격증명을 암호화해 저장하는 API 통합 테스트다. */
@@ -37,6 +38,7 @@ class CredentialIsolationIT {
     @Autowired MockMvc mockMvc;
     @Autowired ObjectMapper objectMapper;
     @Autowired JdbcTemplate jdbcTemplate;
+    @MockitoBean com.cryptoinvest.security.EmailVerificationService emailVerificationService;
 
     @Test
     void permitsOnlyTheConfiguredFrontendOriginForApiCorsRequests() throws Exception {
@@ -56,12 +58,13 @@ class CredentialIsolationIT {
         String email = "api-" + UUID.randomUUID() + "@example.com";
         var registration = mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(Map.of("email", email, "password", "long-enough-password", "privacyAccepted", true, "marketingAccepted", false))))
+                        .content(objectMapper.writeValueAsString(Map.of("email", email, "password", "Good-pass1!", "privacyAccepted", true, "marketingAccepted", false))))
                 .andExpect(status().isOk())
                 .andReturn();
         String token = objectMapper.readTree(registration.getResponse().getContentAsString())
                 .path("accessToken")
                 .asText();
+        jdbcTemplate.update("UPDATE app_user SET nickname = ? WHERE email = ?", "Api" + UUID.randomUUID().toString().substring(0, 5), email);
 
         mockMvc.perform(post("/api/exchange-accounts").contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(Map.of("exchange", "UPBIT", "accessKey", "test-access", "secretKey", "test-secret"))))
@@ -80,9 +83,10 @@ class CredentialIsolationIT {
         String email = "invalid-api-" + UUID.randomUUID() + "@example.com";
         var registration = mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(Map.of("email", email, "password", "long-enough-password", "privacyAccepted", true, "marketingAccepted", false))))
+                        .content(objectMapper.writeValueAsString(Map.of("email", email, "password", "Good-pass1!", "privacyAccepted", true, "marketingAccepted", false))))
                 .andExpect(status().isOk()).andReturn();
         String token = objectMapper.readTree(registration.getResponse().getContentAsString()).path("accessToken").asText();
+        jdbcTemplate.update("UPDATE app_user SET nickname = ? WHERE email = ?", "Api" + UUID.randomUUID().toString().substring(0, 5), email);
 
         mockMvc.perform(post("/api/exchange-accounts").header("Authorization", "Bearer " + token).contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of("accessKey", "access", "secretKey", "secret"))))

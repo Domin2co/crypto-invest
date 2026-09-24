@@ -30,12 +30,12 @@ class LiveTradingServiceTest {
         OrderPlan plan = new OrderPlan(UUID.randomUUID(), Exchange.UPBIT, "KRW-BTC", "BUY", new BigDecimal("10000"), new BigDecimal("0.1"), "rejected-key");
         when(orders.findByUserAndIdempotencyKey(plan.userId(), plan.idempotencyKey())).thenReturn(Optional.empty());
         when(orders.submittedAmountToday(plan.userId())).thenReturn(BigDecimal.ZERO);
-        doThrow(new IllegalStateException("Live order rejected: TRADING_MODE_NOT_LIVE"))
+        doThrow(new IllegalStateException("Live order rejected: LIVE_KILL_SWITCH"))
                 .when(guard).requireAllowed(any(), any(), any());
 
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> new LiveTradingService(guard, orders, credentials, client, confirmations)
                 .execute(UUID.randomUUID(), plan, null, new RiskPolicy(false, BigDecimal.ONE, new BigDecimal("20000"), BigDecimal.ONE)))
-                .hasMessageContaining("TRADING_MODE_NOT_LIVE");
+                .hasMessageContaining("LIVE_KILL_SWITCH");
 
         verifyNoInteractions(credentials, client);
     }

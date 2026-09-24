@@ -6,19 +6,16 @@ import java.math.BigDecimal;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-/** 기본 PAPER 설정과 RiskEngine을 모두 통과한 경우에만 실주문 경로를 열어 준다. */
+/** 신규 실주문은 명시적 enable, 해제된 kill switch, 양수 한도와 RiskEngine을 모두 통과해야 한다. */
 @Component
 public class LiveTradingGuard {
-    private final String tradingMode;
     private final boolean liveTradingEnabled;
     private final boolean liveTradingKillSwitch;
     private final BigDecimal dailyLimit;
 
-    public LiveTradingGuard(@Value("${app.trading-mode:PAPER}") String tradingMode,
-            @Value("${app.live-trading-enabled:false}") boolean liveTradingEnabled,
+    public LiveTradingGuard(@Value("${app.live-trading-enabled:false}") boolean liveTradingEnabled,
             @Value("${app.live-trading-kill-switch:true}") boolean liveTradingKillSwitch,
             @Value("${app.live-daily-limit:0}") BigDecimal dailyLimit) {
-        this.tradingMode = tradingMode;
         this.liveTradingEnabled = liveTradingEnabled;
         this.liveTradingKillSwitch = liveTradingKillSwitch;
         this.dailyLimit = dailyLimit;
@@ -26,7 +23,6 @@ public class LiveTradingGuard {
 
     public void requireSwitchesOpen() {
         if (liveTradingKillSwitch) throw rejected("LIVE_KILL_SWITCH");
-        if (!"LIVE".equals(tradingMode)) throw rejected("TRADING_MODE_NOT_LIVE");
         if (!liveTradingEnabled) throw rejected("LIVE_TRADING_DISABLED");
         if (dailyLimit == null || dailyLimit.signum() <= 0) throw rejected("LIVE_DAILY_LIMIT_NOT_CONFIGURED");
     }

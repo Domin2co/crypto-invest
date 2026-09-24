@@ -23,6 +23,9 @@ public class UserConsentRepository {
     public void withdraw(UUID userId, String type) {
         jdbcTemplate.update("UPDATE user_consent SET withdrawn_at = CURRENT_TIMESTAMP WHERE user_id = ? AND consent_type = ?", userId, type);
     }
+    public boolean isActive(UUID userId, String type) {
+        return Boolean.TRUE.equals(jdbcTemplate.queryForObject("SELECT EXISTS (SELECT 1 FROM user_consent WHERE user_id = ? AND consent_type = ? AND withdrawn_at IS NULL)", Boolean.class, userId, type));
+    }
     public boolean hasActive(UUID userId, String type, OffsetDateTime since) {
         return Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
                 SELECT EXISTS (SELECT 1 FROM user_consent

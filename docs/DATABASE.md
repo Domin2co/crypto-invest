@@ -158,3 +158,33 @@ V3__create_trade_order.sql
 거래소 Secret은 평문 저장하지 않는다.
 
 DB Backup에도 암호화된 값만 포함되도록 한다.
+
+
+## 월간 PAPER 대회 (Flyway V12)
+
+`paper_league_entry`는 사용자별 대회 월 참가 및 시작/종료 총 평가액, 수익률, 체결 수, 순위와 메달을 저장한다. 사용자/월 유일 제약으로 중복 참가를 막는다. `user_consent.consent_type`에는 별도 선택 동의인 `PAPER_LEADERBOARD`가 추가되었다. 동의 철회 시 공개 목적의 참가·결과 행은 삭제한다.
+## 호가 주문 가격 이력 (Flyway V13)
+
+`order_plan`과 `trade_order`에 `order_type` 및 `limit_price`를 저장한다. 모의거래의 호가 주문은 제출 시점의 공개 시세와 비교해 즉시 체결 가능한 경우에만 체결 이력으로 남긴다. 미체결 지정가 주문을 저장하거나 이후 자동 체결하는 주문 수명주기는 구현하지 않았다.
+## LIVE 호가 가격 이력 설명 (Flyway V14)
+
+`order_plan.limit_price`와 `trade_order.limit_price`의 PostgreSQL comment를 PAPER/LIVE 공통 지정가 가격으로 정정했다. V14는 설명 comment만 보완하며 스키마 데이터나 주문 상태를 변경하지 않는다.
+## 종목 토론방 (Flyway V15, V16)
+
+`market_discussion_post`는 종목 기호, 작성 사용자 ID, 1,000자 이하 본문과 생성 시각을 저장한다. `(symbol, created_at DESC, id DESC)` 인덱스로 종목별 최신 50개를 조회하며 계정 삭제 절차에서 작성 글을 삭제한다.
+V16은 토론 게시글 테이블과 모든 열에 한글 COMMENT를 추가한다.
+
+### V18 email verification and cooldown
+
+Migration V18 adds `email_verified` and `email_changed_at` to `app_user`, preserving legacy accounts as verified and starting their change cooldown at account creation. `account_email_verification` stores signup/email-change challenges, attempt count, expiry and HMAC hashes only; authenticated user challenges are deleted with their account, and expired rows are purged daily.
+
+V19 documents every email-challenge column. V20 restores Korean metadata for the rich discussion post fields introduced in V17. V21 documents the accepted discussion image MIME type.
+
+
+## 종목 토론 댓글·투표 (Flyway V22, V23)
+
+`market_discussion_comment`는 게시글별 최대 500자 댓글과 작성자, 생성 시각을 저장한다. `market_discussion_vote`는 사용자/게시글당 하나의 투표(-1 또는 1)만 저장하며 사용자가 방향을 변경하면 기존 표를 갱신한다. 양 테이블은 계정 삭제 시 계정 소유 데이터를 cascade 삭제하고, 각 열의 COMMENT는 V23에서 보완한다. 비추천 수 21 이상에서 본문과 첨부 이미지 조회를 모두 제한한다.
+
+## 토론방 수정·신고·관리 권한 (Flyway V24)
+
+V24는 app_user.role(USER/ADMIN), 게시글·댓글 updated_at, 게시글 관리자 숨김 메타데이터와 사용자당 게시글 한 건의 중복 신고를 막는 market_discussion_report를 추가한다. 댓글과 게시글은 페이지 단위로 조회되며 신고 처리 상태는 PENDING/HIDDEN/DISMISSED/RESTORED로 관리한다. ADMIN 부여는 운영자가 신원 확인 후 DB에서 수행하며 공개 가입 경로로는 권한을 부여할 수 없다.

@@ -1,21 +1,12 @@
-import { useQuery } from '@tanstack/react-query'
+import { useState } from 'react'
+import type { CoinSymbol, Exchange } from './RecommendationPanel'
+import MarketTradingPanel from './MarketTradingPanel'
+import { useMarketStream } from './useMarketStream'
 
-type MarketPrice = { market: string; price: number; capturedAt: string }
-
-/** 공개 시세 API만 호출한다. 사용자 API Key·지갑 정보는 브라우저에 전달하지 않는다. */
-async function loadTicker(): Promise<MarketPrice> {
-  const response = await fetch('/api/markets/UPBIT/ticker?market=KRW-BTC')
-  if (!response.ok) throw new Error('시세를 불러오지 못했습니다.')
-  return response.json() as Promise<MarketPrice>
-}
-
-export default function MarketTicker() {
-  const ticker = useQuery({ queryKey: ['ticker', 'UPBIT', 'KRW-BTC'], queryFn: loadTicker, retry: false })
-  const value = ticker.data ? `₩${Math.round(ticker.data.price).toLocaleString('ko-KR')}` : ticker.isLoading ? '불러오는 중' : '연동 대기'
-
-  return <section className="mt-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm" aria-label="KRW-BTC 공개 시세">
-    <p className="text-sm text-slate-600">Upbit 공개 시세 · KRW-BTC</p>
-    <strong className="mt-2 block text-2xl text-slate-950">{value}</strong>
-    <p className="mt-2 text-sm text-slate-500">공개 API만 사용하며 계정 정보는 요청하지 않습니다.</p>
-  </section>
+/** 공개 시장 데이터만 표시하며 사용자 계정이나 주문 기능에는 접근하지 않는다. */
+export default function MarketTicker({ token }: { token: string | null }) {
+  const [exchange, setExchange] = useState<Exchange>('UPBIT')
+  const [symbol, setSymbol] = useState<CoinSymbol>('BTC')
+  const stream = useMarketStream(symbol)
+  return <MarketTradingPanel exchange={exchange} symbol={symbol} onExchangeChange={setExchange} onSymbolChange={setSymbol} stream={stream} token={token} />
 }

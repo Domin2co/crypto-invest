@@ -72,7 +72,7 @@ npm run build
 npm run test:e2e
 ```
 
-E2E에서는 `PAPER` 또는 Mock Exchange만 사용한다.
+E2E uses the dedicated simulation API or Mock Exchange only.
 
 ---
 
@@ -170,3 +170,10 @@ npm run dev
 - `NOT EXECUTED`
 
 실행하지 않은 테스트를 통과했다고 기록하지 않는다.
+
+### 종목 토론방
+
+- 인증 없는 종목별 목록 조회와 미인증 작성 거부
+- 닉네임 미설정 사용자 작성 차단, 유효 본문 저장 및 종목별 분리
+- 빈 글·1,000자 초과·잘못된 종목 기호 거부
+- 공개 응답의 작성자 식별정보 제한 및 계정 삭제 시 글 삭제

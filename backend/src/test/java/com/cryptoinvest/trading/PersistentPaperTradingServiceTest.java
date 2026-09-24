@@ -23,7 +23,7 @@ class PersistentPaperTradingServiceTest {
         PaperOrderAuditRepository orders = mock(PaperOrderAuditRepository.class);
         OrderPlan plan = new OrderPlan(UUID.randomUUID(), Exchange.UPBIT, "BTC", "BUY", new BigDecimal("10000"), new BigDecimal("0.1"), "paper-buy");
         when(orders.findByUserAndIdempotencyKey(plan.userId(), "paper-buy")).thenReturn(Optional.empty());
-        when(orders.save(any(), any(), any(), any())).thenReturn(true);
+        when(orders.save(any(), any(), any(), any(), any(), any(), any())).thenReturn(true);
         RiskPolicy policy = new RiskPolicy(false, BigDecimal.ONE, new BigDecimal("20000"), BigDecimal.ONE);
 
         var fill = new PersistentPaperTradingService(wallet, orders, new BigDecimal("50000"))
@@ -31,10 +31,10 @@ class PersistentPaperTradingServiceTest {
 
         assertThat(fill.quantity()).isEqualByComparingTo("10");
         assertThat(fill.fee()).isEqualByComparingTo("10");
-        verify(wallet).initializeKrw(plan.userId(), new BigDecimal("50000"));
-        verify(wallet).subtract(eq(plan.userId()), eq("KRW"), argThat(value -> value.compareTo(new BigDecimal("10010")) == 0));
-        verify(wallet).add(eq(plan.userId()), eq("BTC"), argThat(value -> value.compareTo(new BigDecimal("10")) == 0));
-        verify(orders).save(any(), any(), any(), any());
+        verify(wallet).initializeKrw(plan.userId(), Exchange.UPBIT, new BigDecimal("50000"));
+        verify(wallet).subtract(eq(plan.userId()), eq(Exchange.UPBIT), eq("KRW"), argThat(value -> value.compareTo(new BigDecimal("10010")) == 0));
+        verify(wallet).add(eq(plan.userId()), eq(Exchange.UPBIT), eq("BTC"), argThat(value -> value.compareTo(new BigDecimal("10")) == 0));
+        verify(orders).save(any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test void rejectsBeforeTouchingWalletWhenRiskFails() {
@@ -46,7 +46,7 @@ class PersistentPaperTradingServiceTest {
         assertThatThrownBy(() -> new PersistentPaperTradingService(wallet, orders, BigDecimal.ONE)
                 .execute(UUID.randomUUID(), plan, BigDecimal.ONE, null, BigDecimal.ZERO, stopped))
                 .isInstanceOf(IllegalStateException.class);
-        verify(wallet, never()).initializeKrw(any(), any());
+        verify(wallet, never()).initializeKrw(any(), any(), any());
     }
 
     @Test void rollsBackPaperExecutionWhenIdempotencyInsertLosesRace() {
@@ -54,7 +54,7 @@ class PersistentPaperTradingServiceTest {
         PaperOrderAuditRepository orders = mock(PaperOrderAuditRepository.class);
         OrderPlan plan = new OrderPlan(UUID.randomUUID(), Exchange.UPBIT, "BTC", "BUY", new BigDecimal("10000"), new BigDecimal("0.1"), "raced-key");
         when(orders.findByUserAndIdempotencyKey(plan.userId(), plan.idempotencyKey())).thenReturn(Optional.empty());
-        when(orders.save(any(), any(), any(), any())).thenReturn(false);
+        when(orders.save(any(), any(), any(), any(), any(), any(), any())).thenReturn(false);
         RiskPolicy policy = new RiskPolicy(false, BigDecimal.ONE, new BigDecimal("20000"), BigDecimal.ONE);
 
         assertThatThrownBy(() -> new PersistentPaperTradingService(wallet, orders, new BigDecimal("50000"))

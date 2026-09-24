@@ -42,7 +42,11 @@ public class LiveOrderClient {
     }
 
     public LiveOrder submit(OrderPlan plan, BigDecimal sellQuantity, String clientOrderId, ExchangeCredentials credentials) {
-        LinkedHashMap<String, String> body = orderBody(plan, sellQuantity, clientOrderId);
+        return submit(plan, sellQuantity, clientOrderId, credentials, "MARKET", null);
+    }
+
+    public LiveOrder submit(OrderPlan plan, BigDecimal quantity, String clientOrderId, ExchangeCredentials credentials, String orderType, BigDecimal limitPrice) {
+        LinkedHashMap<String, String> body = orderBody(plan, quantity, clientOrderId, orderType, limitPrice);
         String query = queryString(body);
         JsonNode response = request(plan.exchange(), "POST", baseUrl(plan.exchange()) + "/" + orderPath(plan.exchange()), query,
                 json(body), credentials);
@@ -83,19 +87,27 @@ public class LiveOrderClient {
         }
     }
 
-    private LinkedHashMap<String, String> orderBody(OrderPlan plan, BigDecimal sellQuantity, String clientOrderId) {
+    private LinkedHashMap<String, String> orderBody(OrderPlan plan, BigDecimal quantity, String clientOrderId, String orderType, BigDecimal limitPrice) {
         if (!"BUY".equals(plan.side()) && !"SELL".equals(plan.side())) throw new IllegalArgumentException("Unsupported order side");
         LinkedHashMap<String, String> body = new LinkedHashMap<>();
         body.put("market", plan.symbol());
         body.put("side", "BUY".equals(plan.side()) ? "bid" : "ask");
-        if ("BUY".equals(plan.side())) {
+        if ("LIMIT".equals(orderType)) {
+            if (limitPrice == null || limitPrice.signum() <= 0 || quantity == null || quantity.signum() <= 0)
+                throw new IllegalArgumentException("Live limit order requires a positive price and quantity");
+            body.put(plan.exchange() == Exchange.UPBIT ? "ord_type" : "order_type", "limit");
+            body.put("price", limitPrice.toPlainString());
+            body.put("volume", quantity.toPlainString());
+            body.put("time_in_force", "ioc");
+        } else if ("MARKET".equals(orderType) && "BUY".equals(plan.side())) {
             body.put(plan.exchange() == Exchange.UPBIT ? "ord_type" : "order_type", "price");
             body.put("price", plan.amount().toPlainString());
-        } else {
-            if (sellQuantity == null || sellQuantity.signum() <= 0) throw new IllegalArgumentException("Live sell quantity is required");
+        } else if ("MARKET".equals(orderType) && "SELL".equals(plan.side())) {
+            if (quantity == null || quantity.signum() <= 0) throw new IllegalArgumentException("Live sell quantity is required");
             body.put(plan.exchange() == Exchange.UPBIT ? "ord_type" : "order_type", "market");
-            body.put("volume", sellQuantity.toPlainString());
-        }
+            body.put("volume", quantity.toPlainString());
+            body.put("time_in_force", "ioc");
+        } else throw new IllegalArgumentException("Unsupported live order type");
         body.put(plan.exchange() == Exchange.UPBIT ? "identifier" : "client_order_id", clientOrderId);
         return body;
     }

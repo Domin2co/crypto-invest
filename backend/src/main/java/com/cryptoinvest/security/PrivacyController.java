@@ -1,5 +1,8 @@
 package com.cryptoinvest.security;
 
+import com.cryptoinvest.trading.PaperLeagueRepository;
+import com.cryptoinvest.market.MarketDiscussionRepository;
+
 import java.util.List;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
@@ -21,9 +24,14 @@ public class PrivacyController {
     private final UserAuthRepository users;
     private final UserConsentRepository consents;
     private final String policyVersion;
-    public PrivacyController(UserAuthRepository users, UserConsentRepository consents,
-            @Value("${app.privacy-policy-version}") String policyVersion) {
-        this.users = users; this.consents = consents; this.policyVersion = policyVersion;
+    private final String paperLeagueConsentVersion;
+    private final PaperLeagueRepository paperLeague;
+    private final MarketDiscussionRepository discussions;
+    public PrivacyController(UserAuthRepository users, UserConsentRepository consents, PaperLeagueRepository paperLeague, MarketDiscussionRepository discussions,
+            @Value("${app.privacy-policy-version}") String policyVersion,
+            @Value("${app.paper-league-consent-version:2026-09-24}") String paperLeagueConsentVersion) {
+        this.users = users; this.consents = consents; this.paperLeague = paperLeague; this.discussions = discussions;
+        this.policyVersion = policyVersion; this.paperLeagueConsentVersion = paperLeagueConsentVersion;
     }
 
     @GetMapping("/me")
@@ -41,13 +49,30 @@ public class PrivacyController {
         else consents.withdraw(userId, "MARKETING");
     }
 
+
+    @PatchMapping("/paper-leaderboard-consent")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @Transactional
+    public void paperLeaderboard(Authentication authentication, @RequestBody PaperLeaderboardConsent request) {
+        UUID userId = (UUID) authentication.getPrincipal();
+        if (request.accepted()) consents.grant(userId, "PAPER_LEADERBOARD", paperLeagueConsentVersion);
+        else {
+            consents.withdraw(userId, "PAPER_LEADERBOARD");
+            paperLeague.deleteByUserId(userId);
+        }
+    }
+
     @DeleteMapping("/me")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @Transactional
     public void delete(Authentication authentication) {
-        users.anonymizeAndDisable((UUID) authentication.getPrincipal());
+        UUID userId = (UUID) authentication.getPrincipal();
+        paperLeague.deleteByUserId(userId);
+        discussions.deleteByUserId(userId);
+        users.anonymizeAndDisable(userId);
     }
 
     public record MarketingConsent(boolean accepted) {}
+    public record PaperLeaderboardConsent(boolean accepted) {}
     public record PrivacyExport(String email, List<UserConsentRepository.Consent> consents) {}
 }

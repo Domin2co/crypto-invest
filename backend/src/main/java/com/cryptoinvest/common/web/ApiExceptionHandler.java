@@ -1,6 +1,7 @@
 package com.cryptoinvest.common.web;
 
 import java.util.Map;
+import java.time.Instant;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -13,6 +14,17 @@ public class ApiExceptionHandler {
     @ExceptionHandler(MethodArgumentNotValidException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public Map<String, String> invalidValidationRequest() { return Map.of("code", "INVALID_REQUEST"); }
+
+    @ExceptionHandler(com.cryptoinvest.security.AccountProfileController.NicknameTakenException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public Map<String, String> nicknameTaken() { return Map.of("code", "NICKNAME_TAKEN"); }
+    @ExceptionHandler(com.cryptoinvest.security.AccountProfileController.EmailChangeCooldownException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public Map<String, String> emailChangeCooldown(com.cryptoinvest.security.AccountProfileController.EmailChangeCooldownException exception) { return Map.of("code", "EMAIL_CHANGE_COOLDOWN", "availableAt", exception.availableAt().toString()); }
+
+    @ExceptionHandler(com.cryptoinvest.security.AccountProfileController.EmailTakenException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public Map<String, String> emailTaken() { return Map.of("code", "EMAIL_TAKEN"); }
 
     @ExceptionHandler(IllegalArgumentException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)

@@ -21,3 +21,10 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .secondary-button:hover { background: #f2f4f6; }
 .danger-button { border: 1px solid #f2b8b5; background: white; color: #c92a2a; }
 @media (max-width: 480px) { .panel-card { padding: 18px; border-radius: 16px; } }
+.orderbook-scroll { scrollbar-width: none; }
+.orderbook-scroll.is-scrolling { scrollbar-width: thin; scrollbar-color: #94a3b8 #f1f5f9; }
+.orderbook-scroll::-webkit-scrollbar { width: 4px; }
+.orderbook-scroll::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 999px; }
+.orderbook-scroll::-webkit-scrollbar-thumb { background: transparent; border-radius: 999px; }
+.orderbook-scroll.is-scrolling::-webkit-scrollbar-thumb { background: #94a3b8; }
+.orderbook-scroll::-webkit-scrollbar-thumb:hover { background: #64748b; }
