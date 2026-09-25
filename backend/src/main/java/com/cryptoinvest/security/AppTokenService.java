@@ -16,14 +16,17 @@ import org.springframework.stereotype.Component;
 public class AppTokenService {
     private final byte[] signingKey;
     private final Clock clock;
+    private final UserAuthRepository users;
 
     @Autowired
-    public AppTokenService(@Value("${app.auth-token-secret:}") String secret) { this(secret, Clock.systemUTC()); }
-    AppTokenService(String secret, Clock clock) { this.signingKey = decodeKey(secret); this.clock = clock; }
+    public AppTokenService(@Value("${app.auth-token-secret:}") String secret, UserAuthRepository users) { this(secret, Clock.systemUTC(), users); }
+    AppTokenService(String secret, Clock clock) { this(secret, clock, null); }
+    AppTokenService(String secret, Clock clock, UserAuthRepository users) { this.signingKey = decodeKey(secret); this.clock = clock; this.users = users; }
 
     public String issue(UUID userId) {
-        long expiresAt = clock.instant().plusSeconds(60 * 60 * 8).getEpochSecond();
-        String payload = userId + "." + expiresAt;
+        long expiresAt = clock.instant().plusSeconds(60 * 30).getEpochSecond();
+        int version = users == null ? 0 : users.authTokenVersion(userId);
+        String payload = userId + "." + expiresAt + ".v3." + version;
         return Base64.getUrlEncoder().withoutPadding().encodeToString(payload.getBytes(StandardCharsets.UTF_8)) + "." + signature(payload);
     }
 
@@ -33,8 +36,11 @@ public class AppTokenService {
         String payload = new String(Base64.getUrlDecoder().decode(parts[0]), StandardCharsets.UTF_8);
         if (!MessageDigest.isEqual(signature(payload).getBytes(StandardCharsets.US_ASCII), parts[1].getBytes(StandardCharsets.US_ASCII))) throw new IllegalArgumentException("Invalid access token");
         String[] values = payload.split("\\.");
-        if (values.length != 2 || Long.parseLong(values[1]) <= clock.instant().getEpochSecond()) throw new IllegalArgumentException("Expired access token");
-        return UUID.fromString(values[0]);
+        if (values.length != 4 || !"v3".equals(values[2])) throw new IllegalArgumentException("Invalid access token");
+        if (Long.parseLong(values[1]) <= clock.instant().getEpochSecond()) throw new IllegalArgumentException("Expired access token");
+        UUID userId = UUID.fromString(values[0]);
+        if (users != null && Integer.parseInt(values[3]) != users.authTokenVersion(userId)) throw new IllegalArgumentException("Revoked access token");
+        return userId;
     }
 
     private static byte[] decodeKey(String secret) {
@@ -46,6 +52,10 @@ public class AppTokenService {
         } catch (IllegalArgumentException exception) {
             throw new IllegalStateException("AUTH_TOKEN_SECRET must be a base64 32-byte key", exception);
         }
+    }
+
+    public String fingerprint(String value) {
+        return signature("rate-limit:" + value);
     }
 
     private String signature(String payload) {

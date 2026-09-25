@@ -1,7 +1,7 @@
 # Crypto Invest 로컬 기능 테스트 가이드
 
-- 문서 버전: 2.6
-- 기준일: 2026-09-24
+- 문서 버전: 2.8
+- 기준일: 2026-09-25
 - 갱신 기준: 화면, API, 실행 절차 또는 환경 설정이 바뀔 때 이 문서와 PDF를 함께 갱신합니다.
 
 ## 실행 구성
@@ -64,7 +64,7 @@ npm run dev -- --host 127.0.0.1
 2. `회원가입` 탭에서 테스트 이메일과 대문자·소문자·숫자·특수문자가 포함된 10~20자 비밀번호를 입력하고 이메일 인증을 완료한 뒤 필수 개인정보 처리 동의를 선택합니다. 마케팅 동의는 선택입니다.
 3. 가입 뒤 닉네임 설정 화면에서 2~8자의 한글 완성형·영문·숫자로 닉네임을 만들고 `중복확인` 후 저장합니다. 공백, 특수문자, 자음/모음 단독 문자는 사용할 수 없습니다. 닉네임을 저장하기 전에는 다른 메뉴와 보호 API에 접근할 수 없습니다.
 4. 닉네임 수정도 새 닉네임마다 중복확인이 필요합니다. 마이 페이지의 `내 정보 수정` 화면에서 비밀번호 변경과 이메일 변경을 할 수 있습니다. 이메일은 새 주소 인증 후 가입/변경일부터 90일이 지나야 수정할 수 있습니다.
-5. 닉네임이 이미 등록된 계정으로 로그인하면 대시보드로 이동합니다. 로그인 토큰은 현재 탭의 sessionStorage에 보관됩니다. F5 뒤에도 로그인 상태가 유지되고 로그아웃하면 토큰이 지워집니다.
+5. 닉네임이 이미 등록된 계정으로 로그인하면 대시보드로 이동합니다. 로그인 토큰은 현재 탭의 sessionStorage에 보관됩니다. 상단에 남은 시간이 표시되고 30분 연장 버튼으로 현재 토큰이 살아있는 동안 새 30분을 연장할 수 있습니다. 만료되면 자동으로 로그아웃 화면으로 이동합니다. 첫 배포 후에는 기존 토큰이 폐기되므로 한 번 다시 로그인해야 합니다. F5 뒤에도 세션은 복원되며 로그아웃하면 토큰이 지워집니다.
 
 가입/로그인 API는 브라우저의 `/api/auth/register`, `/api/auth/login` 요청으로 보이고 Vite가 Backend로 전달합니다. 이전의 409 `INVALID_STATE` 문제는 기동 시 인증 키 검증으로 바뀌었습니다. 키 설정이 잘못되면 Backend가 원인을 로그에 남기고 기동을 거부합니다.
 
@@ -153,8 +153,15 @@ Backend와 Frontend 창에서 각각 `Ctrl+C`를 누릅니다. DB와 Redis를 �
 
 ## 새로고침 후 로그인 유지
 
-로그인한 같은 브라우저 탭에서 F5를 누르면 인증 토큰을 탭 세션 저장소에서 복원하여 현재 경로를 다시 엽니다. 로그아웃하면 토큰이 지워집니다. 탭을 닫으면 탭 세션이 종료됩니다. 토큰 만료 시간은 8시간이며 만료된 경우 다시 로그인합니다.
+로그인한 같은 브라우저 탭에서 F5를 누르면 인증 토큰을 탭 세션 저장소에서 복원하여 현재 경로를 다시 엽니다. 로그아웃하면 토큰이 지워집니다. 탭을 닫으면 탭 세션이 종료됩니다. 토큰은 발급 후 30분에 만료되며 상단에 남은 시간이 표시됩니다. 현재 유효한 토큰으로 30분 연장 버튼을 누르면 새 30분 토큰을 발급합니다. 만료되면 자동 로그아웃됩니다. 30분 이전에 발급된 기존 토큰은 새 토큰 형식 도입 시 폐기되어 재로그인이 필요합니다.
 
 ## 종목 토론방 수정·신고 기능
 
-게시글 상세에서 작성자는 수정/삭제할 수 있고 댓글 작성자에게는 댓글 수정/삭제가 표시됩니다. 댓글은 한 페이지에 10개씩 이동할 수 있습니다. 다른 사용자의 수정 요청은 서버가 거절합니다. 로그인한 사용자는 신고 사유를 골라 신고할 수 있습니다. 관리자 계정은 상단 메뉴의 신고 관리에서 신고를 검토해 숨김, 기각, 복원을 수행합니다. ADMIN 역할은 공개 화면에서 지정되지 않으며 운영자가 별도 권한 절차로 부여해야 합니다.
+게시글 상세에서 작성자는 수정/삭제할 수 있고 댓글 작성자에게는 댓글 수정/삭제가 표시됩니다. 댓글은 한 페이지에 10개씩 이동할 수 있습니다. 다른 사용자의 수정 요청은 서버가 거절합니다. 로그인한 사용자는 신고 사유를 골라 신고할 수 있습니다. 관리자 계정은 상단 메뉴의 관리자 페이지에서 토론방 신고 관리를 열어 신고를 검토하고 숨김, 기각, 복원을 수행합니다. 서버도 각 관리자 API 요청마다 ADMIN 역할을 검사합니다. ADMIN 역할은 공개 화면에서 지정되지 않으며 운영자가 별도 권한 절차로 부여해야 합니다.
+
+## Password reset and monthly PAPER recovery
+
+- From the login form, open password reset, request an email code, verify the code, and set a new password. Confirm the old password no longer works and sign in with the new password. Existing sessions are revoked immediately after reset.
+- Local reset/signup emails are visible in Mailpit at `http://127.0.0.1:8025`.
+- For the monthly PAPER league, confirm the opening snapshot timestamp appears in the board and that participant fills remain blocked while the opening snapshot is pending. Delayed snapshots display their actual capture time.
+- Production email uses the `production` Spring profile and authenticated STARTTLS. Provider account, verified sender domain, DNS records, and secret values must be configured manually before delivery.

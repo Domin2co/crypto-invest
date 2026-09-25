@@ -68,9 +68,9 @@ ExchangeClient
 
 ### recommendation
 
-시장 데이터와 Indicator를 이용해 Score와 Signal을 계산한다.
+추천 계산은 유료 AI에 의존하지 않는 재현 가능한 규칙으로 구성한다. 공통 모델은 `MarketRegime`, signed asset score, 별도 confidence, factor contributions, metric availability/source/capture time을 표현하며 결측 지표는 추정하지 않는다. Coin-specific strategy와 Portfolio Recommendation은 별도 단계로 분리한다.
 
-실제 주문 기능은 포함하지 않는다.
+Asset score와 사용자 포트폴리오 액션은 서로 다른 결과다. 자산 평가를 규칙 버전·지표·요인·데이터 품질과 함께 시점 스냅샷으로 저장할 DB 구조를 준비한다. portfolio action은 user-scoped 상태를 읽어 별도로 계산한다. 주문 생성/실행은 포함하지 않는다.
 
 ### portfolio
 
@@ -168,4 +168,8 @@ Infrastructure Adapter
 - 공개 응답은 닉네임·본문·시각만 포함하며 작성자 이메일과 내부 계정 ID를 포함하지 않는다.
 ## Login reload and discussion moderation
 
-The SPA restores its bearer token from tab-scoped `sessionStorage` on startup and hydrates account role/nickname through `/api/account/profile`. The backend uses stateless bearer authentication; the token expires after eight hours and logout clears the tab copy. Discussion comments have a dedicated ten-item page API. Post/comment changes are scoped to the authenticated author, while an ADMIN role check protects report listing and hide/dismiss/restore actions.
+The SPA restores its bearer token from tab-scoped `sessionStorage` on startup and hydrates account role/nickname through `/api/account/profile`. The backend uses stateless bearer authentication; the token expires after 30 minutes and can be explicitly renewed through an authenticated account endpoint while valid. A token format version change invalidates previously issued tokens during rollout. Logout clears the tab copy. Discussion comments have a dedicated ten-item page API. Post/comment changes are scoped to the authenticated author, while an ADMIN role check protects report listing and hide/dismiss/restore actions.
+
+## Account recovery and PAPER settlement
+
+Password reset extends the shared email-verification service, consumes its one-time token, updates the password, and increments the per-user bearer-token version in one transaction. Previously issued sessions are rejected immediately. Monthly PAPER boundary valuations persist their source quote timestamp on the league entry; the scheduler retries throughout day one in the Seoul timezone.

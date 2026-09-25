@@ -24,3 +24,29 @@ public class HealthController {
         return Map.of("status", "UP", "liveOrderSubmissionEnabled", liveOrderSubmissionEnabled);
     }
 }
+
+
+@org.springframework.stereotype.Component("paperLeague")
+class PaperLeagueHealthIndicator implements org.springframework.boot.actuate.health.HealthIndicator {
+    private static final java.time.ZoneId ZONE = java.time.ZoneId.of("Asia/Seoul");
+    private final com.cryptoinvest.trading.PaperLeagueRepository league;
+
+    PaperLeagueHealthIndicator(com.cryptoinvest.trading.PaperLeagueRepository league) {
+        this.league = league;
+    }
+
+    @Override
+    public org.springframework.boot.actuate.health.Health health() {
+        java.time.LocalDate today = java.time.LocalDate.now(ZONE);
+        java.time.YearMonth month = java.time.YearMonth.from(today);
+        int pendingStarts = league.overdueStartingSnapshots(month, today.getDayOfMonth() > 1);
+        int pendingFinals = league.overdueFinalSnapshots(month);
+        var health = org.springframework.boot.actuate.health.Health.status(
+                pendingStarts == 0 && pendingFinals == 0
+                        ? org.springframework.boot.actuate.health.Status.UP
+                        : org.springframework.boot.actuate.health.Status.DOWN);
+        return health.withDetail("pendingOpeningSnapshots", pendingStarts)
+                .withDetail("pendingClosingSnapshots", pendingFinals)
+                .build();
+    }
+}

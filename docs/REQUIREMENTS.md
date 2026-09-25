@@ -68,6 +68,14 @@
 - 추천 근거
 - Risk Adjustment
 
+### 3.3.1 규칙 기반 Recommendation Engine
+
+- 시장 레짐(RISK_ON/NEUTRAL/RISK_OFF), 자산 점수(-100..+100), 별도 신뢰도(0..100)를 계산한다.
+- Technical 30%, regime 20%, fundamental/on-chain 20%, flow/derivatives 15%, relative strength 10%, risk 5%의 초기 가중치를 버전 관리한다. 데이터 미확보 항목은 임의 추정하지 않고 신뢰도를 낮춘다.
+- Strong buy/buy/hold/reduce/strong reduce는 자산 평가이며 포트폴리오 action 및 주문과 분리한다.
+- 코인 전략은 BTC/ETH/SOL/XRP/기타로 분리하고 사용 가능한 무료 공개 데이터만 사용한다.
+- 평가 시각, 규칙 버전, 시장 레짐, 입력 지표, 요인 기여도, 점수/신뢰도를 저장하고 사후 7/30일 수익률 비교가 가능해야 한다.
+
 ### 3.4 포트폴리오 분석
 
 - 총 자산
@@ -216,4 +224,19 @@
 - 댓글은 최신순으로 페이지당 10개씩 조회한다.
 - 작성자는 본인 게시글과 댓글만 수정·삭제할 수 있으며 서버가 소유권을 확인한다.
 - 로그인 사용자는 게시글을 신고할 수 있고 동일 사용자의 같은 게시글 중복 신고는 막는다.
-- ADMIN만 신고 목록을 열고 게시글 숨김·신고 기각·숨김 복원을 처리한다. 숨김 글은 공개 목록에서 제외하고 상세 본문/이미지를 제공하지 않는다.
+- ADMIN만 관리자 페이지와 신고 목록을 열고 게시글 숨김·신고 기각·숨김 복원을 처리한다. 숨김 글은 공개 목록에서 제외하고 상세 본문/이미지를 제공하지 않는다.
+## 세션 유지 시간
+
+- 인증 토큰은 발급 후 30분에 만료되며 상단에 남은 시간을 표시한다.
+- 유효한 로그인 토큰이 있는 동안 사용자는 버튼으로 새 30분 토큰을 발급할 수 있다. 일반 화면 조작은 만료 시각을 자동 연장하지 않는다.
+- 토큰이 만료되면 프론트엔드는 탭 토큰을 지우고 로그인 화면으로 이동한다. 서버도 만료된 토큰을 거부한다.
+
+### 관리자 계정 및 역할 관리
+
+- ADMIN은 사용자 계정을 이메일 또는 닉네임으로 검색해 USER/ADMIN 역할을 부여·회수할 수 있다. 변경 요청은 사유를 필수로 입력하고 담당자, 대상, 변경 전후 역할, 사유, 시각을 감사 기록으로 남긴다.
+- 본인 관리자 권한 회수와 마지막 활성 ADMIN 회수를 거부하며, 동시 변경 중에도 관리자 권한을 모두 잃지 않도록 직렬화한다. 초기 ADMIN은 검토된 운영 절차로 수동 부여한다.
+
+
+## Account recovery and monthly PAPER settlement
+
+Password recovery verifies mailbox ownership with a short-lived code and one-time token, returns a generic request response to avoid disclosing registered addresses, and applies the existing 10-20 character password policy. Monthly PAPER results store the actual market quote capture time and remain unranked when recovery misses the first-day window.

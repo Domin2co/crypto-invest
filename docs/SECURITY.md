@@ -15,6 +15,14 @@ PAPER 체결 중 이 충돌이 발생하면 지갑 변경과 주문 기록을 �
 
 로그인 후 닉네임이 없으면 `/api/account/profile`, 닉네임 중복확인·저장 API만 허용한다. 다른 인증 API는 서버 Bearer filter에서 `NICKNAME_REQUIRED`로 차단하며, UI 경로 제한을 우회해도 동일하게 적용된다. 중복확인은 저장 직전에도 확인하고 DB case-insensitive unique index가 동시 요청 경합을 막는다.
 
+## TOTP 다중 인증
+
+계정 설정에서 인증 앱 기반 TOTP를 선택적으로 켤 수 있다. 비밀 키는 사용자별 추가 인증 정보를 사용해 AES-GCM 암호화하며, 인증 시간 구간 재사용을 막고 1회용 복구 코드는 원문을 저장하지 않는다. 복구 코드는 설정 완료 시 한 번만 표시한다. 로그인 및 설정 요청에는 DB 기반 계정/IP 제한이 적용된다. TOTP는 피싱 방지 인증이 아니므로 공개 출시 전 운영 HTTPS 도메인에 맞춘 WebAuthn/passkey를 별도 검토한다.
+
+## 신뢰 프록시 IP
+
+`X-Forwarded-For`는 즉시 연결된 프록시가 `TRUSTED_PROXY_CIDRS`에 포함될 때만 오른쪽에서 신뢰 체인을 해석한다. 미설정 또는 비신뢰 직접 연결은 헤더를 무시하고 socket peer IP를 사용한다. 배포 프록시는 클라이언트 제공 forwarding 헤더를 덮어써야 한다.
+
 ## 1. 기본 원칙
 
 이 프로젝트는 거래소 API Key와 실제 자산을 다룰 수 있으므로 일반 웹 프로젝트보다 보수적인 보안 정책을 적용한다.
@@ -188,8 +196,23 @@ Password changes verify the current BCrypt password and apply the same 10–20 A
 
 ## Browser login persistence
 
-Bearer access tokens are kept in tab-scoped `sessionStorage` so a reload in the same tab restores the login. Logout removes the token. The backend remains stateless and validates token expiry (currently eight hours); the browser does not extend it. `sessionStorage` is readable by page JavaScript, so XSS prevention remains required. Do not move the token to persistent `localStorage` without a security review.
+Bearer access tokens are kept in tab-scoped `sessionStorage` so a reload in the same tab restores the login. Logout removes the token. The backend remains stateless and validates token expiry after 30 minutes; a token format version change invalidates previously issued longer-lived tokens on rollout, so existing users must sign in again. The UI shows the remaining time and can request a replacement 30-minute token while the current token is valid. Ordinary browsing does not extend it; the browser logs out at expiry. `sessionStorage` is readable by page JavaScript, so XSS prevention remains required. Do not move the token to persistent `localStorage` without a security review.
 
 ## Discussion ownership and moderation
 
-Discussion update/delete SQL includes the authenticated user ID; missing ownership is returned as not found. Reports are unique per reporter and post. ADMIN routes check the persisted `app_user.role` server-side on every request. Grant ADMIN only through a reviewed operational database procedure; the UI role field does not grant authority. Hiding removes the post from public lists and suppresses body/image access; restoration is recorded against moderation reports.
+Discussion update/delete SQL includes the authenticated user ID; missing ownership is returned as not found. Reports are unique per reporter and post. ADMIN routes check the persisted `app_user.role` server-side on every request. Administrators grant or revoke ADMIN through the authenticated user-management API with a required reason. Each change records the acting and target user IDs, prior and new roles, reason, and timestamp. Initial ADMIN provisioning remains a reviewed manual operation. The API rechecks the persisted actor role after acquiring the role-change lock and prevents self-demotion or removal of the last active administrator. Hiding removes the post from public lists and suppresses body/image access; restoration is recorded against moderation reports.
+
+
+## Password recovery and mail transport
+
+Password reset uses the existing HMAC-hashed email challenge, five-attempt limit, ten-minute code expiry, and fifteen-minute single-use verification token. The request endpoint responds identically for known and unknown addresses. Production SMTP requires authenticated STARTTLS and certificate hostname verification; credentials belong in deployment secrets.
+
+Password reset increments the per-user token version. Previously issued bearer tokens are rejected immediately, and the new password plus revocation are committed together.
+
+#
+
+
+
+## 인증 요청 제한
+
+로그인은 이메일 계정 기준 15분당 10회, IP 기준 60회로 제한한다. 가입 인증 코드와 비밀번호 재설정 메일은 이메일 계정 기준 1시간당 3회, IP 기준 20회로 제한하고 기존 이메일별 재전송 간격과 코드 시도 제한도 유지한다. 제한은 PostgreSQL에서 원자적으로 공유하며 저장 키는 인증 비밀키 기반 HMAC 지문이다. 제한 초과는 HTTP 429와 일반 코드 `RATE_LIMITED`를 반환한다. 애플리케이션은 `HttpServletRequest.getRemoteAddr()`를 사용하며, reverse proxy 배포에서는 신뢰 프록시/전달 헤더 구성을 운영자가 검토하고 프록시가 외부 제공 forwarded 헤더를 제거해야 한다.

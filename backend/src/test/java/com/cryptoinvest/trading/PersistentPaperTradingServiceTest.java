@@ -21,12 +21,13 @@ class PersistentPaperTradingServiceTest {
     @Test void persistsWalletAndAuditOnlyAfterRiskAcceptsBuy() {
         PaperWalletRepository wallet = mock(PaperWalletRepository.class);
         PaperOrderAuditRepository orders = mock(PaperOrderAuditRepository.class);
+        PaperLeagueRepository league = mock(PaperLeagueRepository.class);
         OrderPlan plan = new OrderPlan(UUID.randomUUID(), Exchange.UPBIT, "BTC", "BUY", new BigDecimal("10000"), new BigDecimal("0.1"), "paper-buy");
         when(orders.findByUserAndIdempotencyKey(plan.userId(), "paper-buy")).thenReturn(Optional.empty());
         when(orders.save(any(), any(), any(), any(), any(), any(), any())).thenReturn(true);
         RiskPolicy policy = new RiskPolicy(false, BigDecimal.ONE, new BigDecimal("20000"), BigDecimal.ONE);
 
-        var fill = new PersistentPaperTradingService(wallet, orders, new BigDecimal("50000"))
+        var fill = new PersistentPaperTradingService(wallet, orders, league, new BigDecimal("50000"))
                 .execute(UUID.randomUUID(), plan, new BigDecimal("1000"), null, new BigDecimal("0.001"), policy);
 
         assertThat(fill.quantity()).isEqualByComparingTo("10");
@@ -40,24 +41,43 @@ class PersistentPaperTradingServiceTest {
     @Test void rejectsBeforeTouchingWalletWhenRiskFails() {
         PaperWalletRepository wallet = mock(PaperWalletRepository.class);
         PaperOrderAuditRepository orders = mock(PaperOrderAuditRepository.class);
+        PaperLeagueRepository league = mock(PaperLeagueRepository.class);
         OrderPlan plan = new OrderPlan(UUID.randomUUID(), Exchange.UPBIT, "BTC", "BUY", new BigDecimal("10000"), new BigDecimal("0.1"), "rejected");
         RiskPolicy stopped = new RiskPolicy(true, BigDecimal.ONE, new BigDecimal("20000"), BigDecimal.ONE);
 
-        assertThatThrownBy(() -> new PersistentPaperTradingService(wallet, orders, BigDecimal.ONE)
+        assertThatThrownBy(() -> new PersistentPaperTradingService(wallet, orders, league, BigDecimal.ONE)
                 .execute(UUID.randomUUID(), plan, BigDecimal.ONE, null, BigDecimal.ZERO, stopped))
                 .isInstanceOf(IllegalStateException.class);
         verify(wallet, never()).initializeKrw(any(), any(), any());
     }
 
+    @Test void blocksLeagueParticipantUntilOpeningValuationIsSaved() {
+        PaperWalletRepository wallet = mock(PaperWalletRepository.class);
+        PaperOrderAuditRepository orders = mock(PaperOrderAuditRepository.class);
+        PaperLeagueRepository league = mock(PaperLeagueRepository.class);
+        OrderPlan plan = new OrderPlan(UUID.randomUUID(), Exchange.UPBIT, "BTC", "BUY", new BigDecimal("10000"), new BigDecimal("0.1"), "pending-start");
+        when(orders.findByUserAndIdempotencyKey(plan.userId(), "pending-start")).thenReturn(Optional.empty());
+        when(league.hasPendingStart(plan.userId(), java.time.YearMonth.now(PaperLeagueService.ZONE))).thenReturn(true);
+        RiskPolicy policy = new RiskPolicy(false, BigDecimal.ONE, new BigDecimal("20000"), BigDecimal.ONE);
+
+        assertThatThrownBy(() -> new PersistentPaperTradingService(wallet, orders, league, BigDecimal.ONE)
+                .execute(UUID.randomUUID(), plan, new BigDecimal("1000"), null, BigDecimal.ZERO, policy))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Monthly PAPER league start valuation is pending");
+        verify(wallet, never()).initializeKrw(any(), any(), any());
+        verify(orders, never()).save(any(), any(), any(), any(), any(), any(), any());
+    }
+
     @Test void rollsBackPaperExecutionWhenIdempotencyInsertLosesRace() {
         PaperWalletRepository wallet = mock(PaperWalletRepository.class);
         PaperOrderAuditRepository orders = mock(PaperOrderAuditRepository.class);
+        PaperLeagueRepository league = mock(PaperLeagueRepository.class);
         OrderPlan plan = new OrderPlan(UUID.randomUUID(), Exchange.UPBIT, "BTC", "BUY", new BigDecimal("10000"), new BigDecimal("0.1"), "raced-key");
         when(orders.findByUserAndIdempotencyKey(plan.userId(), plan.idempotencyKey())).thenReturn(Optional.empty());
         when(orders.save(any(), any(), any(), any(), any(), any(), any())).thenReturn(false);
         RiskPolicy policy = new RiskPolicy(false, BigDecimal.ONE, new BigDecimal("20000"), BigDecimal.ONE);
 
-        assertThatThrownBy(() -> new PersistentPaperTradingService(wallet, orders, new BigDecimal("50000"))
+        assertThatThrownBy(() -> new PersistentPaperTradingService(wallet, orders, league, new BigDecimal("50000"))
                 .execute(UUID.randomUUID(), plan, new BigDecimal("1000"), null, new BigDecimal("0.001"), policy))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("Paper order idempotency conflict");

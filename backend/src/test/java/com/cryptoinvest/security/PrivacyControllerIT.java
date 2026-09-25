@@ -159,4 +159,22 @@ class PrivacyControllerIT {
                 .andExpect(status().isNoContent());
         org.assertj.core.api.Assertions.assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM paper_league_entry WHERE user_id = ?", Integer.class, userId)).isZero();
     }
+    @Test
+    void extendsOnlyTheAuthenticatedUserSessionAndReturnsANewAccessToken() throws Exception {
+        String email = "session-" + UUID.randomUUID() + "@example.com";
+        var registration = mockMvc.perform(post("/api/auth/register").contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("email", email, "password", "Good-pass1!", "privacyAccepted", true, "marketingAccepted", false))))
+                .andExpect(status().isOk()).andReturn();
+        String token = objectMapper.readTree(registration.getResponse().getContentAsString()).path("accessToken").asText();
+        String nickname = "S" + UUID.randomUUID().toString().substring(0, 6);
+        mockMvc.perform(post("/api/account/nickname").header("Authorization", "Bearer " + token).contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("nickname", nickname))))
+                .andExpect(status().isNoContent());
+        var extended = mockMvc.perform(post("/api/account/session/extend").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.accessToken").isNotEmpty()).andReturn();
+        String extendedToken = objectMapper.readTree(extended.getResponse().getContentAsString()).path("accessToken").asText();
+        mockMvc.perform(get("/api/account/profile").header("Authorization", "Bearer " + extendedToken))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.nickname").value(nickname));
+        mockMvc.perform(post("/api/account/session/extend")).andExpect(status().isUnauthorized());
+    }
 }

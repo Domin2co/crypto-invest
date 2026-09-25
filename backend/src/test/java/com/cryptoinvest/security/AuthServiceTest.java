@@ -20,7 +20,7 @@ class AuthServiceTest {
         when(users.create(anyString(), anyString())).thenReturn(id);
         AppTokenService tokens = new AppTokenService(Base64.getEncoder().encodeToString(new byte[32]), java.time.Clock.systemUTC());
 
-        String token = new AuthService(users, consents, tokens).register("user@example.com", "long-enough-password", true, true, "2026-09-21");
+        String token = new AuthService(users, consents, tokens, mock(EmailVerificationService.class), mock(TotpMfaService.class)).register("user@example.com", "long-enough-password", true, true, "2026-09-21");
 
         assertThat(tokens.verify(token)).isEqualTo(id);
         verify(consents).grant(id, "PRIVACY", "2026-09-21");
@@ -31,7 +31,14 @@ class AuthServiceTest {
         UserConsentRepository consents = mock(UserConsentRepository.class);
         AppTokenService tokens = new AppTokenService(Base64.getEncoder().encodeToString(new byte[32]), java.time.Clock.systemUTC());
         when(users.findEnabledByEmail("user@example.com")).thenReturn(Optional.of(new UserAuthRepository.UserCredentials(UUID.randomUUID(), new org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder().encode("correct-password"))));
-        org.assertj.core.api.Assertions.assertThatThrownBy(() -> new AuthService(users, consents, tokens).login("user@example.com", "wrong-password"))
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> new AuthService(users, consents, tokens, mock(EmailVerificationService.class), mock(TotpMfaService.class)).login("user@example.com", "wrong-password"))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test void matchesRfc6238Sha1Vector() {
+        String secret = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ";
+        assertThat(TotpMfaService.totp(secret, 1)).isEqualTo("287082");
+        assertThat(TotpMfaService.matchingStep(secret, "287082", 59)).isEqualTo(1L);
+        assertThat(TotpMfaService.matchingStep(secret, "000000", 59)).isNull();
     }
 }

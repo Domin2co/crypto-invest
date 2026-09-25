@@ -24,13 +24,17 @@ public class PaperLeagueRepository {
         jdbc.update("INSERT INTO paper_league_entry (id, user_id, league_month) VALUES (?, ?, ?) ON CONFLICT (user_id, league_month) DO NOTHING",
                 UUID.randomUUID(), userId, Date.valueOf(month.atDay(1)));
     }
+    public boolean hasPendingStart(UUID userId, YearMonth month) {
+        return Boolean.TRUE.equals(jdbc.queryForObject("SELECT EXISTS (SELECT 1 FROM paper_league_entry e JOIN user_consent c ON c.user_id = e.user_id AND c.consent_type = 'PAPER_LEADERBOARD' AND c.withdrawn_at IS NULL WHERE e.user_id = ? AND e.league_month = ? AND e.starting_value IS NULL)",
+                Boolean.class, userId, Date.valueOf(month.atDay(1))));
+    }
     public boolean enrolled(UUID userId, YearMonth month) {
         return Boolean.TRUE.equals(jdbc.queryForObject("SELECT EXISTS (SELECT 1 FROM paper_league_entry WHERE user_id = ? AND league_month = ?)",
                 Boolean.class, userId, Date.valueOf(month.atDay(1))));
     }
     public List<Entry> findForMonth(YearMonth month) {
         return jdbc.query("""
-                SELECT e.id, e.user_id, u.nickname, e.starting_value, e.final_value, e.return_percent,
+                SELECT e.id, e.user_id, u.nickname, e.starting_value, e.final_value, e.return_percent, e.starting_value_captured_at, e.final_value_captured_at,
                     (SELECT COUNT(*) FROM trade_order t WHERE t.user_id = e.user_id AND t.trading_mode = 'PAPER'
                      AND t.status = 'FILLED' AND t.created_at >= ? AND t.created_at < ?) AS trade_count,
                     e.place, e.badge
@@ -40,8 +44,8 @@ public class PaperLeagueRepository {
                 WHERE e.league_month = ?
                 ORDER BY e.created_at, u.nickname
                 """, (rs, row) -> new Entry(UUID.fromString(rs.getString(1)), UUID.fromString(rs.getString(2)), rs.getString(3),
-                rs.getBigDecimal(4), rs.getBigDecimal(5), rs.getBigDecimal(6), rs.getInt(7),
-                (Integer) rs.getObject(8), rs.getString(9)),
+                rs.getBigDecimal(4), rs.getBigDecimal(5), rs.getBigDecimal(6), rs.getTimestamp(7) == null ? null : rs.getTimestamp(7).toInstant(), rs.getTimestamp(8) == null ? null : rs.getTimestamp(8).toInstant(), rs.getInt(9),
+                (Integer) rs.getObject(10), rs.getString(11)),
                 month.atDay(1).atStartOfDay(java.time.ZoneId.of("Asia/Seoul")).toOffsetDateTime(),
                 month.plusMonths(1).atDay(1).atStartOfDay(java.time.ZoneId.of("Asia/Seoul")).toOffsetDateTime(),
                 Date.valueOf(month.atDay(1)));
@@ -60,13 +64,22 @@ public class PaperLeagueRepository {
         return jdbc.query("SELECT user_id FROM paper_league_entry WHERE league_month = ? AND starting_value IS NOT NULL AND final_value IS NULL ORDER BY user_id",
                 (rs, row) -> UUID.fromString(rs.getString(1)), Date.valueOf(month.atDay(1)));
     }
-    public void setStartingValue(UUID userId, YearMonth month, BigDecimal value) {
-        jdbc.update("UPDATE paper_league_entry SET starting_value = ? WHERE user_id = ? AND league_month = ? AND starting_value IS NULL",
-                value, userId, Date.valueOf(month.atDay(1)));
+    public int overdueStartingSnapshots(YearMonth month, boolean recoveryWindowPassed) {
+        return jdbc.queryForObject("SELECT count(*) FROM paper_league_entry WHERE starting_value IS NULL AND (league_month < ? OR (? AND league_month = ?))",
+                Integer.class, Date.valueOf(month.atDay(1)), recoveryWindowPassed, Date.valueOf(month.atDay(1)));
     }
-    public void setFinalValue(UUID userId, YearMonth month, BigDecimal value, BigDecimal returnPercent, int tradeCount) {
-        jdbc.update("UPDATE paper_league_entry SET final_value = ?, return_percent = ?, trade_count = ? WHERE user_id = ? AND league_month = ? AND final_value IS NULL",
-                value, returnPercent, tradeCount, userId, Date.valueOf(month.atDay(1)));
+    public int overdueFinalSnapshots(YearMonth month) {
+        return jdbc.queryForObject("SELECT count(*) FROM paper_league_entry WHERE starting_value IS NOT NULL AND final_value IS NULL AND league_month < ?",
+                Integer.class, Date.valueOf(month.atDay(1)));
+    }
+
+    public void setStartingValue(UUID userId, YearMonth month, BigDecimal value, java.time.Instant capturedAt) {
+        jdbc.update("UPDATE paper_league_entry SET starting_value = ?, starting_value_captured_at = ? WHERE user_id = ? AND league_month = ? AND starting_value IS NULL",
+                value, capturedAt == null ? null : java.time.OffsetDateTime.ofInstant(capturedAt, java.time.ZoneOffset.UTC), userId, Date.valueOf(month.atDay(1)));
+    }
+    public void setFinalValue(UUID userId, YearMonth month, BigDecimal value, BigDecimal returnPercent, int tradeCount, java.time.Instant capturedAt) {
+        jdbc.update("UPDATE paper_league_entry SET final_value = ?, return_percent = ?, trade_count = ?, final_value_captured_at = ? WHERE user_id = ? AND league_month = ? AND final_value IS NULL",
+                value, returnPercent, tradeCount, capturedAt == null ? null : java.time.OffsetDateTime.ofInstant(capturedAt, java.time.ZoneOffset.UTC), userId, Date.valueOf(month.atDay(1)));
     }
     public void setPlace(UUID userId, YearMonth month, int place, String badge) {
         jdbc.update("UPDATE paper_league_entry SET place = ?, badge = ? WHERE user_id = ? AND league_month = ? AND final_value IS NOT NULL",
@@ -83,6 +96,6 @@ public class PaperLeagueRepository {
     public void deleteByUserId(UUID userId) { jdbc.update("DELETE FROM paper_league_entry WHERE user_id = ?", userId); }
 
     public record Entry(UUID id, UUID userId, String nickname, BigDecimal startingValue, BigDecimal finalValue,
-            BigDecimal returnPercent, int tradeCount, Integer place, String badge) {}
+            BigDecimal returnPercent, java.time.Instant startingCapturedAt, java.time.Instant finalCapturedAt, int tradeCount, Integer place, String badge) {}
     public record Wallet(UUID userId, Exchange exchange, String currency, BigDecimal amount) {}
 }

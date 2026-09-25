@@ -187,4 +187,36 @@ V19 documents every email-challenge column. V20 restores Korean metadata for the
 
 ## 토론방 수정·신고·관리 권한 (Flyway V24)
 
-V24는 app_user.role(USER/ADMIN), 게시글·댓글 updated_at, 게시글 관리자 숨김 메타데이터와 사용자당 게시글 한 건의 중복 신고를 막는 market_discussion_report를 추가한다. 댓글과 게시글은 페이지 단위로 조회되며 신고 처리 상태는 PENDING/HIDDEN/DISMISSED/RESTORED로 관리한다. ADMIN 부여는 운영자가 신원 확인 후 DB에서 수행하며 공개 가입 경로로는 권한을 부여할 수 없다.
+V24는 app_user.role(USER/ADMIN), 게시글·댓글 updated_at, 게시글 관리자 숨김 메타데이터와 사용자당 게시글 한 건의 중복 신고를 막는 market_discussion_report를 추가한다. 댓글과 게시글은 페이지 단위로 조회되며 신고 처리 상태는 PENDING/HIDDEN/DISMISSED/RESTORED로 관리한다. 초기 ADMIN 부여는 운영자가 신원 확인 후 검토된 운영 절차로 수행하며 공개 가입 경로로는 권한을 부여할 수 없다. 이후 역할 변경은 감사 로그를 남기는 관리자 전용 도구로 처리한다.
+
+## 관리자 역할 변경 감사 (Flyway V25)
+
+`admin_role_change_audit`는 담당자/대상 사용자 ID, 이전·새 역할, 필수 사유, 변경 시각을 보존한다. ID는 계정 삭제 뒤에도 감사 추적에 남도록 사용자 외래 키를 두지 않는다. 역할 변경 트랜잭션은 PostgreSQL advisory lock으로 직렬화하고 최신 관리자 수를 확인한다.
+
+
+## 2026-09-25 migrations
+
+- V26 adds `PASSWORD_RESET` to the email verification purpose constraint.
+- V27 records the market quote capture time for monthly PAPER opening and final valuation snapshots.
+
+- V29 adds a per-user auth token version; password reset increments it to revoke every prior bearer session.
+
+#
+
+
+
+## Recommendation evaluation snapshots (Flyway V33)
+
+`recommendation_evaluation_snapshot` stores a point-in-time, non-user-specific asset evaluation with exchange/market, rule version, regime and signed scores, confidence, rating, indicator/factor/data-quality JSON snapshots, and nullable 7/30-day forward outcomes. The evaluated inputs and scores describe a fixed point in time; only nullable forward-return outcome fields may be filled after their horizons elapse. It contains no portfolio recommendation or order command.
+
+## TOTP 다중 인증 (Flyway V31)
+
+`user_totp_mfa`는 사용자별 암호화 비밀 키, 활성화 상태, 재사용 차단 시간 구간을 저장한다. `user_totp_recovery_code`에는 1회용 복구 코드의 원문 대신 서버 HMAC 지문만 저장한다. 계정 삭제 시 FK cascade로 함께 삭제된다.
+
+## TOTP 컬럼 설명 보완 (Flyway V32)
+
+V31 TOTP 테이블의 식별자, 활성화 상태, 생성·활성화 시각 컬럼에 한국어 데이터베이스 설명을 추가한다. 기존 V31 migration은 변경하지 않는다.
+
+## API 요청 제한 (Flyway V30)
+
+인증 API의 이메일 계정별·IP별 고정 구간 카운터를 PostgreSQL에 원자적으로 기록한다. 제한 키는 서버 인증 비밀키 기반 HMAC 지문이며 이메일·IP 원문을 저장하지 않는다. 만료된 행은 시간별 스케줄로 정리한다.

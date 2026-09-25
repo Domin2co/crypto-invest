@@ -34,4 +34,9 @@
 - [ ] 공개 게시글의 운영 규칙, 신고·삭제 요청 처리와 유해 게시물 대응 절차를 정하고 개인정보처리방침에 반영
 - [ ] 보유기간, 탈퇴 시 삭제 및 백업에서의 파기 시점을 개인정보·법률 검토로 확정
 
-현재 구현은 텍스트 작성·조회와 계정 삭제 시 작성 글 삭제를 지원한다. 신고, 편집·개별 삭제와 자동/운영자 moderation 도구는 아직 제공하지 않으며 공개 서비스 출시 전에 별도 결정이 필요하다.
+현재 구현은 게시글 신고 접수, 신고 검토와 관리자 숨김·기각·복원, 작성자 본인의 수정·삭제를 지원한다. 응답 기한, 이의제기·상담 경로, 반복 위반 대응, 감사 기록 보유 기간과 백업 파기 시점은 아직 운영 정책으로 확정되지 않았으므로 공개 서비스 출시 전에 정해야 한다.
+
+
+## Operational readiness updates (2026-09-25)
+
+The service now defines a fail-closed missed-month rule: after the Seoul first-day recovery window, missing PAPER valuations remain unranked and are never backdated; /actuator/health reports overdue settlement snapshots. The discussion-report runbook sets internal response targets and appeal handling, while legal response deadlines, content-retention periods, backup expiry, and the public privacy-policy text still require review and approval by the responsible privacy/legal owner. A local PostgreSQL dump-and-isolated-restore verification script is available; production backup schedule, retention, off-host protection, and witnessed recovery exercise remain operational deployment tasks.

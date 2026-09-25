@@ -33,4 +33,10 @@ public class ApiExceptionHandler {
     @ExceptionHandler(IllegalStateException.class)
     @ResponseStatus(HttpStatus.CONFLICT)
     public Map<String, String> invalidState() { return Map.of("code", "INVALID_STATE"); }
+
+
+    @ExceptionHandler(com.cryptoinvest.security.AuthRateLimitService.RateLimitExceededException.class)
+    public org.springframework.http.ResponseEntity<Map<String, String>> rateLimited() {
+        return org.springframework.http.ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(Map.of("code", "RATE_LIMITED"));
+    }
 }

@@ -14,9 +14,15 @@ export default function AccountAccess({ token, onTokenChange, nickname, onNaviga
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
   const [email, setEmail] = useState('')
+  const [mfaRequired, setMfaRequired] = useState(false)
+  const [authenticatorCode, setAuthenticatorCode] = useState('')
   const [challengeId, setChallengeId] = useState('')
   const [verificationCode, setVerificationCode] = useState('')
   const [verificationToken, setVerificationToken] = useState('')
+  const [resetOpen, setResetOpen] = useState(false)
+  const [resetCodeSent, setResetCodeSent] = useState(false)
+  const [resetCode, setResetCode] = useState('')
+  const [resetToken, setResetToken] = useState('')
 
   useEffect(() => {
     if (!token) { setPrivacy(null); return }
@@ -36,7 +42,7 @@ export default function AccountAccess({ token, onTokenChange, nickname, onNaviga
       const response = await fetch(`/api/auth/${register ? 'register' : 'login'}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
           email: form.get('email'), password: form.get('password'),
-          ...(register ? { verificationToken } : {}),
+          ...(register ? { verificationToken } : { authenticatorCode: authenticatorCode || undefined }),
           ...(register ? { privacyAccepted: form.get('privacyAccepted') === 'on', marketingAccepted: form.get('marketingAccepted') === 'on' } : {}),
         }),
       })
@@ -45,8 +51,11 @@ export default function AccountAccess({ token, onTokenChange, nickname, onNaviga
         if (response.status === 409 || problem.code === 'INVALID_STATE') throw new Error('server-state')
         throw new Error(register ? 'register-input' : 'login-input')
       }
-      const accessToken = (await response.json() as { accessToken: string }).accessToken
-      onTokenChange(accessToken)
+      const result = await response.json() as { accessToken?: string; mfaRequired?: boolean }
+      if (result.mfaRequired) { setMfaRequired(true); setMessage('인증 앱 코드 또는 복구 코드를 입력해 주세요.'); return }
+      if (!result.accessToken) throw new Error('login-input')
+      setMfaRequired(false)
+      onTokenChange(result.accessToken)
       setMessage(register ? '회원가입이 완료되었습니다.' : '로그인되었습니다.')
     } catch (error) {
       const reason = error instanceof Error ? error.message : ''
@@ -58,6 +67,32 @@ export default function AccountAccess({ token, onTokenChange, nickname, onNaviga
             ? '로그인하지 못했습니다. 이메일과 비밀번호를 확인해 주세요.'
             : '요청을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.')
     } finally { setBusy(false) }
+  }
+
+  async function requestPasswordReset() {
+    setBusy(true); setMessage('')
+    try {
+      const response = await fetch('/api/auth/password-reset', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) })
+      if (!response.ok) throw new Error()
+      setResetCodeSent(true); setMessage('If the email is registered, a verification code has been sent.')
+    } catch { setMessage('Password reset could not be started. Please try again later.') } finally { setBusy(false) }
+  }
+  async function confirmPasswordReset() {
+    setBusy(true); setMessage('')
+    try {
+      const response = await fetch('/api/auth/password-reset/confirm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, code: resetCode }) })
+      if (!response.ok) throw new Error()
+      setResetToken((await response.json() as { verificationToken: string }).verificationToken); setMessage('Email verified. Enter a new password.')
+    } catch { setMessage('The code is invalid or expired.') } finally { setBusy(false) }
+  }
+  async function completePasswordReset(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setBusy(true); setMessage('')
+    const form = new FormData(event.currentTarget)
+    try {
+      const response = await fetch('/api/auth/password-reset/complete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, verificationToken: resetToken, newPassword: form.get('newPassword') }) })
+      if (!response.ok) throw new Error()
+      setResetOpen(false); setResetCodeSent(false); setResetToken(''); setResetCode(''); setMessage('Password updated. Please sign in.')
+    } catch { setMessage('Password could not be updated. Check the password format and try again.') } finally { setBusy(false) }
   }
 
   async function marketing(accepted: boolean) {
@@ -106,6 +141,7 @@ export default function AccountAccess({ token, onTokenChange, nickname, onNaviga
       <form className="mt-6 grid max-w-xl gap-4" onSubmit={authenticate}>
         <label className="field-label">이메일<input className="field-input" name="email" type="email" autoComplete="email" required maxLength={254} value={email} onChange={(event) => { setEmail(event.target.value); setVerificationToken(''); setChallengeId('') }} /></label>
         <label className="field-label">비밀번호<PasswordField className="field-input" name="password" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} required maxLength={mode === 'login' ? 128 : 20} minLength={mode === 'register' ? 10 : undefined} pattern={mode === 'register' ? '(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9])[!-~]{10,20}' : undefined} /></label>
+        {mode === 'login' && mfaRequired && <label className="field-label">인증 앱 코드 또는 복구 코드<input className="field-input" name="authenticatorCode" inputMode="numeric" autoComplete="one-time-code" maxLength={32} value={authenticatorCode} onChange={(event) => setAuthenticatorCode(event.target.value)} required /></label>}
         {mode === 'register' && <div className="grid gap-2">
           <button className="secondary-button w-fit" type="button" disabled={busy || !email} onClick={async () => { setBusy(true); try { const r = await fetch('/api/auth/email-verification', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) }); if (!r.ok) throw new Error(); setChallengeId((await r.json() as { challengeId: string }).challengeId); setMessage('인증 코드를 이메일로 보냈습니다.') } catch { setMessage('인증 메일을 보내지 못했습니다. 이메일 및 메일 서버 설정을 확인해 주세요.') } finally { setBusy(false) } }}>{challengeId ? '인증 코드 다시 받기' : '인증 코드 받기'}</button>
           {challengeId && <div className="flex gap-2"><label className="field-label flex-1">이메일 인증 코드<input className="field-input" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={verificationCode} onChange={(e) => setVerificationCode(e.target.value)} /></label><button className="secondary-button self-end" type="button" disabled={busy || verificationCode.length !== 6} onClick={async () => { setBusy(true); try { const r = await fetch('/api/auth/email-verification/confirm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ challengeId, email, code: verificationCode }) }); if (!r.ok) throw new Error(); setVerificationToken((await r.json() as { verificationToken: string }).verificationToken); setMessage('이메일 인증을 완료했습니다.') } catch { setMessage('인증 코드가 올바르지 않거나 만료되었습니다.') } finally { setBusy(false) } }}>인증 확인</button></div>}
@@ -117,6 +153,15 @@ export default function AccountAccess({ token, onTokenChange, nickname, onNaviga
         </>}
         <button className="primary-button mt-2 w-full sm:w-fit" disabled={busy || (mode === 'register' && !verificationToken)} type="submit">{busy ? '처리 중...' : mode === 'login' ? '로그인' : '회원가입'}</button>
       </form>
+      {mode === 'login' && <div className="mt-3 max-w-xl">
+        {!resetOpen ? <button className="text-sm text-blue-700 underline" type="button" onClick={() => setResetOpen(true)}>{'\uBE44\uBC00\uBC88\uD638\uB97C \uC78A\uC73C\uC168\uB098\uC694?'}</button> : <div className="grid gap-3 rounded-xl bg-slate-50 p-4">
+          <p className="text-sm font-semibold">{'\uBE44\uBC00\uBC88\uD638 \uCC3E\uAE30'}</p>
+          <button className="secondary-button w-fit" type="button" disabled={busy || !email} onClick={requestPasswordReset}>{'\uC778\uC99D \uCF54\uB4DC \uBC1B\uAE30'}</button>
+          {resetCodeSent && <div className="flex flex-wrap items-end gap-2"><label className="field-label min-w-48 flex-1">{'\uC774\uBA54\uC77C \uC778\uC99D \uCF54\uB4DC'}<input className="field-input" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={resetCode} onChange={(event) => setResetCode(event.target.value)} /></label><button className="secondary-button" type="button" disabled={busy || resetCode.length !== 6} onClick={confirmPasswordReset}>{'\uCF54\uB4DC \uD655\uC778'}</button></div>}
+          {resetToken && <form className="grid gap-3" onSubmit={completePasswordReset}><label className="field-label">{'\uC0C8 \uBE44\uBC00\uBC88\uD638'}<PasswordField className="field-input" name="newPassword" autoComplete="new-password" required minLength={10} maxLength={20} pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9])[!-~]{10,20}" /></label><button className="primary-button w-fit" disabled={busy} type="submit">{'\uBE44\uBC00\uBC88\uD638 \uBCC0\uACBD'}</button></form>}
+          <button className="text-left text-sm text-slate-600 underline" type="button" onClick={() => { setResetOpen(false); setResetCodeSent(false); setResetToken('') }}>{'\uB2EB\uAE30'}</button>
+        </div>}
+      </div>}
     </> : <div className="mt-6 grid max-w-xl gap-4">
       <p className="rounded-lg bg-slate-50 p-3 text-sm text-slate-700">현재 닉네임: <strong>{nickname}</strong></p>
       <p className="rounded-xl bg-slate-50 p-4 text-sm" aria-live="polite">로그인 계정: {privacy?.email ?? '정보를 불러오는 중입니다.'}</p>

@@ -11,7 +11,7 @@
 - [x] 별도 선택 공개 동의, 다음 달 참가 신청, 월별 평가액·체결 수·순위·상위 3개 메달 (Flyway V12)
 - [x] 모의거래 화면에 현재 랭킹·최근 메달·참가 신청 연결; 동의 철회 시 기록 제거
 - [x] 월별 open/close PostgreSQL transaction advisory lock으로 다중 인스턴스 중복 집계 방지; 첫 5분 매분 재시도 및 실패 로그 추가
-- [ ] Backend가 한국 시간 월 1일 첫 5분 내내 중단되거나 시세가 끊긴 경우의 정확한 복구는 과거 잔고 스냅샷이 없어 미지원; 운영 전 이력 데이터/월 마감 정책 결정
+- [x] 월초 첫날 복구 기간을 놓치면 과거 평가액을 추정/소급하지 않고 해당 참가자는 미순위로 처리; 다음 달은 정상 진행하며 미해결 평가는 Actuator health로 감지 (정확한 과거 손익 재구성은 미지원)
 
 
 ## 2026-09-22 Phase 13 보완
@@ -82,9 +82,15 @@
 
 ### Phase 7 — Recommendation Engine
 
-- [x] Score model, Signal, Recommendation reasons
-- [x] Target allocation
-- [x] deterministic regression test
+- [x] Legacy score model, signal, reasons and deterministic regression test
+- [x] Phase 1 foundation: signed score/confidence/regime/explainability domain model and point-in-time evaluation schema (V33)
+- [ ] Phase 2 technical indicators: SMA20/60/120, EMA/MACD, RSI, OHLC true-range ATR and volume trend.
+- [ ] Phase 3 Market Regime: BTC trend/averages, dominance change, global market cap/volume, Fear & Greed, funding, open interest, ATR and available ETF flows; preserve missing-source status.
+- [ ] Phase 4 exact initial factor weights (30/20/20/15/10/5), score bands, confidence from coverage/freshness/agreement/outliers.
+- [ ] Phase 5 `CoinEvaluationStrategy` implementations for BTC/ETH/SOL/XRP/default; add only sourced free metrics (BTC MVRV/SOPR/exchange/LTH, ETH staking/TVL/stablecoins/L2, SOL TVL/DEX/addresses/fees/activity, XRP XRPL/DEX/RWA/RLUSD/adoption/ETF).
+- [ ] Phase 6 user-owned portfolio allocation: cash/positions/PnL/targets, configurable BTC/ETH/major/high-risk/total-alt caps, 10% cash floor, volatility/correlation, distinct buy sizing and sell reasons/actions.
+- [ ] Phase 7 return asset score and portfolio action separately through explainable, source/timestamp/status-complete API DTO and UI; never emit/execute orders.
+- [ ] Phase 8 point-in-time backtest using rule version and stored inputs; calculate 7/30-day outcomes without look-ahead and compare later performance.
 
 ### Phase 8 — Portfolio / Risk Engine
 
@@ -206,4 +212,37 @@ Phase 13 완료 보고 전까지는 작업을 막는 경우가 아니면 별도 
 - [x] F5 새로고침 뒤 같은 탭에서 로그인 상태 복원, 로그아웃 시 탭 토큰 제거
 - [x] 댓글 페이지당 10개 조회와 작성자 본인 글/댓글 수정·삭제
 - [x] 게시글 신고 중복 방지, ADMIN 신고 목록과 숨김·기각·복원 기능
-- [ ] 운영자가 검토된 계정에 ADMIN 역할을 부여하고 공개 서비스 신고 대응 절차를 확정
+- [x] 운영자가 검토된 계정에 ADMIN 역할을 부여·회수하는 관리자 화면/API와 감사 기록 구현
+- [x] 신고 접수·우선순위·내부 처리 목표·이의제기 절차를 운영 문서화 (법정 기한 및 보유기간은 법무/개인정보 승인 수동)
+## 2026-09-25 관리자 페이지 및 세션 만료
+
+- [x] 기존 토론방 신고 검토 도구에 연결되는 역할 제한 관리자 홈 추가
+- [x] 인증 토큰의 서버 만료 시간을 30분으로 제한하고 기존 8시간 토큰 폐기, 상단 카운트다운·30분 연장 API 및 만료 경계 테스트 추가
+
+
+## 2026-09-25 Approved follow-up (implemented; see TEST_RESULTS.md)
+
+- [x] Email-based password reset with generic request response, one-time email code/token, and existing password policy.
+- [x] Retry monthly PAPER valuations throughout Seoul month day 1 and persist the quote capture time and block participant PAPER fills until the opening snapshot is saved. Missed settlements remain unranked after the recovery window.
+- [x] Production SMTP profile requiring authentication and STARTTLS; password reset also revokes existing bearer sessions. Provider/domain/DNS setup remains a manual deployment task.
+
+
+## 2026-09-25 Settlement, moderation, backup and monitoring improvements
+
+- [x] Missed monthly PAPER settlement policy: do not synthesize/backdate missing values; keep affected entries unranked and expose overdue snapshots through the Actuator health component.
+- [x] Document report triage, privacy-request ownership checks, internal response targets and appeal handling; statutory deadlines and retention still require privacy/legal approval.
+- [x] Add a PowerShell PostgreSQL custom-format backup script that restores into a temporary database and verifies the restored database without overwriting the source.
+- [x] Document health polling, safe alert contents, backup retention/RPO/RTO ownership and isolated restore exercises.
+- [ ] Production email: choose SMTP provider, verify sender domain, publish SPF/DKIM/DMARC, and place SMTP credentials in the deployment secret manager.
+- [ ] Production alerts: choose an operator-owned delivery channel/webhook and configure the health monitor without including personal data or secrets.
+- [ ] Backups: provide an approved encrypted off-host destination, set retention/RPO/RTO with the service owner, then run and record the isolated restore exercise there.
+- [ ] Legal/privacy: designated privacy/legal reviewer must approve collection, retention, deletion-from-backups, user-rights response and public launch materials.
+- [ ] Ingress/auth: set exact trusted proxy CIDRs; choose the production HTTPS origin/RP ID before adding phishing-resistant passkeys.
+
+
+## 2026-09-25 Authentication abuse protection
+
+- [x] PostgreSQL-shared HMAC-keyed limits for login, signup code email and password reset; preserve generic reset response and existing challenge controls.
+- [x] Add opt-in trusted-proxy CIDR handling for auth request limits; untrusted peers cannot spoof X-Forwarded-For.
+- [x] Add optional TOTP MFA setup, replay prevention, one-use recovery codes, and login/account UI.
+- [ ] Set TRUSTED_PROXY_CIDRS to the actual ingress proxy ranges in deployment. Add WebAuthn/passkeys after production HTTPS origin and RP ID are confirmed; TOTP is not phishing-resistant.

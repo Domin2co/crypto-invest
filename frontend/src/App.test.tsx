@@ -90,6 +90,73 @@ describe('App navigation and account flow', () => {
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/api/auth/register'))).toBe(true)
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/api/auth/login'))).toBe(true)
   })
+  it('clears the tab session and returns to login when its token expires', async () => {
+    const payload = crypto.randomUUID() + '.' + (Math.floor(Date.now() / 1000) + 3) + '.v3'
+    const encoded = btoa(payload).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_')
+    window.sessionStorage.setItem('crypto-invest-token', encoded + '.test-signature')
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => String(input).includes('/api/account/profile')
+      ? { ok: true, json: async () => ({ nickname: 'User42', nicknameRequired: false, role: 'USER' }) }
+      : { ok: true, json: async () => ({ status: 'UP', liveOrderSubmissionEnabled: false }) }))
+    mount()
+    expect(await screen.findByRole('heading', { name: '내 자산과 시장을 차분히 살펴보세요' })).toBeInTheDocument()
+    await new Promise((resolve) => setTimeout(resolve, 3500))
+    expect(sessionStorage.getItem('crypto-invest-token')).toBeNull()
+    expect(window.location.pathname).toBe('/account')
+  })
+  it('displays remaining time and extends the authenticated session by 30 minutes', async () => {
+    const makeToken = (seconds: number) => {
+      const payload = crypto.randomUUID() + '.' + (Math.floor(Date.now() / 1000) + seconds) + '.v3'
+      return btoa(payload).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_') + '.signature'
+    }
+    const currentToken = makeToken(500)
+    const extendedToken = makeToken(1800)
+    window.sessionStorage.setItem('crypto-invest-token', currentToken)
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/api/account/profile')) return { ok: true, json: async () => ({ nickname: 'User42', nicknameRequired: false, role: 'USER' }) }
+      if (url.endsWith('/api/account/session/extend')) return { ok: true, json: async () => ({ accessToken: extendedToken }) }
+      return { ok: true, json: async () => ({ status: 'UP', liveOrderSubmissionEnabled: false }) }
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    mount()
+    expect(await screen.findByRole('button', { name: '30분 연장' })).toBeInTheDocument()
+    expect(screen.getByText(/^세션 \d+:\d{2}$/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '30분 연장' }))
+    expect(await screen.findByRole('status')).toHaveTextContent('세션을 30분 연장했습니다.')
+    expect(sessionStorage.getItem('crypto-invest-token')).toBe(extendedToken)
+    expect(fetchMock).toHaveBeenCalledWith('/api/account/session/extend', expect.objectContaining({
+      method: 'POST', headers: { Authorization: 'Bearer ' + currentToken },
+    }))
+  })
+  it('shows the admin dashboard and existing moderation tool only for an admin role', async () => {
+    window.sessionStorage.setItem('crypto-invest-token', 'admin-token')
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/api/account/profile')) return { ok: true, json: async () => ({ nickname: 'Admin42', nicknameRequired: false, role: 'ADMIN' }) }
+      if (url.includes('/api/admin/discussion-reports')) return { ok: true, json: async () => ({ content: [], page: 0, totalPages: 0, totalElements: 0 }) }
+      if (url.includes('/api/admin/users')) return { ok: true, json: async () => ({ users: [], recentChanges: [{ actorUserId: 'admin-1', targetUserId: 'user-1', actorLabel: '운영관리자', targetLabel: '테스트사용자', previousRole: 'USER', newRole: 'ADMIN', reason: '운영 승인', changedAt: '2026-09-25T00:00:00Z' }] }) }
+      return { ok: true, json: async () => ({ status: 'UP', liveOrderSubmissionEnabled: false }) }
+    }))
+    window.history.replaceState(null, '', '/admin')
+    mount()
+    expect(await screen.findByRole('heading', { name: '관리자' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('link', { name: /토론방 신고 관리/ }))
+    expect(await screen.findByRole('heading', { name: '토론방 신고 관리' })).toBeInTheDocument()
+  })
+  it('opens the admin user role management screen', async () => {
+    window.sessionStorage.setItem('crypto-invest-token', 'admin-token')
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/api/account/profile')) return { ok: true, json: async () => ({ nickname: 'Admin42', nicknameRequired: false, role: 'ADMIN' }) }
+      if (url.includes('/api/admin/users')) return { ok: true, json: async () => ({ users: [], recentChanges: [{ actorUserId: 'admin-1', targetUserId: 'user-1', actorLabel: '운영관리자', targetLabel: '테스트사용자', previousRole: 'USER', newRole: 'ADMIN', reason: '운영 승인', changedAt: '2026-09-25T00:00:00Z' }] }) }
+      return { ok: true, json: async () => ({ status: 'UP', liveOrderSubmissionEnabled: false }) }
+    }))
+    window.history.replaceState(null, '', '/admin/users')
+    mount()
+    expect(await screen.findByRole('heading', { name: '사용자 권한 관리' })).toBeInTheDocument()
+    expect(screen.getByLabelText('권한 변경 사유 (5~500자)')).toBeInTheDocument()
+    expect(screen.getByText(/운영관리자 → 테스트사용자/)).toBeInTheDocument()
+  })
   it('explains a backend configuration conflict during signup', async () => {
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => String(input).includes('/api/auth/register')
       ? { ok: false, status: 409, json: async () => ({ code: 'INVALID_STATE' }) }

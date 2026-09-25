@@ -15,6 +15,7 @@ import NicknameEditor from './NicknameEditor'
 import LiveTradingPanel from './LiveTradingPanel'
 import PaperLeaguePanel from './PaperLeaguePanel'
 import DiscussionModeration from './DiscussionModeration'
+import AdminUserManagement from './AdminUserManagement'
 
 type Page = { path: string; label: string; title: string }
 const pages: Page[] = [
@@ -35,6 +36,19 @@ function InternalLink({ to, onNavigate, children, ...attributes }: { to: string;
   return <a {...attributes} href={to} onClick={follow}>{children}</a>
 }
 
+function tokenExpiry(token: string): number | null {
+  try {
+    const payload = window.atob(token.split('.')[0].replace(/-/g, '+').replace(/_/g, '/'))
+    const values = payload.split('.')
+    if (!/^[0-9a-f-]{36}$/i.test(values[0]) || !/^\d+$/.test(values[1] ?? '')) return null
+    if (values[2] !== 'v3') return 0
+    const expiresAt = Number(values[1]) * 1000
+    return Number.isSafeInteger(expiresAt) ? expiresAt : null
+  } catch {
+    return null
+  }
+}
+
 /** 인증 토큰은 현재 브라우저 탭의 sessionStorage에 보관해 새로고침 후 복원한다. */
 function App() {
   const health = useQuery({ queryKey: ['health'], retry: false, queryFn: async () => {
@@ -50,15 +64,34 @@ function App() {
   const [profile, setProfile] = useState<{ nickname: string | null; nicknameRequired: boolean; role: string } | null>(null)
   const [profileLoading, setProfileLoading] = useState(false)
   const [profileError, setProfileError] = useState(false)
+  const [sessionNow, setSessionNow] = useState(Date.now())
+  const [sessionExtending, setSessionExtending] = useState(false)
+  const [sessionMessage, setSessionMessage] = useState('')
   const pendingLoginRedirect = useRef(false)
   const nicknameGateActive = !!token && (profileLoading || profileError || !profile || profile.nicknameRequired)
   const updateToken = (next: string | null) => {
     if (next) window.sessionStorage.setItem('crypto-invest-token', next)
     else window.sessionStorage.removeItem('crypto-invest-token')
-    pendingLoginRedirect.current = !!next
+    pendingLoginRedirect.current = !!next && !token
     setToken(next); setProfile(null); setProfileError(false); setProfileLoading(!!next)
   }
   const navigate = (nextPath: string) => { window.history.pushState(null, '', nextPath); setPath(nextPath) }
+  const extendSession = async () => {
+    if (!token || sessionExtending) return
+    setSessionExtending(true); setSessionMessage('')
+    try {
+      const response = await fetch('/api/account/session/extend', { method: 'POST', headers: { Authorization: 'Bearer ' + token } })
+      if (!response.ok) throw new Error('session')
+      const result = await response.json() as { accessToken: string }
+      updateToken(result.accessToken)
+      setSessionNow(Date.now())
+      setSessionMessage('세션을 30분 연장했습니다.')
+    } catch {
+      setSessionMessage('세션을 연장하지 못했습니다. 다시 로그인해 주세요.')
+    } finally {
+      setSessionExtending(false)
+    }
+  }
   useEffect(() => {
     const syncPath = () => setPath(window.location.pathname)
     window.addEventListener('popstate', syncPath)
@@ -75,21 +108,44 @@ function App() {
       .finally(() => { if (active) setProfileLoading(false) })
     return () => { active = false }
   }, [token])
+  useEffect(() => {
+    if (!token) return
+    const interval = window.setInterval(() => setSessionNow(Date.now()), 1000)
+    return () => window.clearInterval(interval)
+  }, [token])
+
+  useEffect(() => {
+    if (!token) return
+    const expiresAt = tokenExpiry(token)
+    if (expiresAt === null) return
+    const timeout = window.setTimeout(() => {
+      window.sessionStorage.removeItem('crypto-invest-token')
+      pendingLoginRedirect.current = false
+      setToken(null); setProfile(null); setProfileError(false); setSessionMessage('')
+      window.history.replaceState(null, '', '/account')
+      setPath('/account')
+    }, Math.max(0, expiresAt - Date.now()))
+    return () => window.clearTimeout(timeout)
+  }, [token])
+
+  const expiry = token ? tokenExpiry(token) : null
+  const remainingSeconds = expiry === null ? null : Math.max(0, Math.ceil((expiry - sessionNow) / 1000))
   const current = pages.find((page) => page.path === path)
-  const title = path === '/' ? 'Crypto Invest' : current?.title ?? (path === '/account' ? '로그인과 회원가입' : path === '/account/edit' ? '내 정보 수정' : path === '/admin/discussions' ? '토론방 신고 관리' : path === '/privacy' ? '개인정보 처리방침' : '페이지를 찾을 수 없습니다')
+  const title = path === '/' ? 'Crypto Invest' : current?.title ?? (path === '/account' ? '로그인과 회원가입' : path === '/account/edit' ? '내 정보 수정' : path === '/admin' ? '관리자' : path === '/admin/discussions' ? '토론방 신고 관리' : path === '/admin/users' ? '사용자 권한 관리' : path === '/privacy' ? '개인정보 처리방침' : '페이지를 찾을 수 없습니다')
   useEffect(() => { document.title = path === '/' ? 'Crypto Invest' : title + ' | Crypto Invest' }, [path, title])
   return <div className="min-h-screen bg-slate-50 text-slate-900">
     <div className="mx-auto flex min-h-screen max-w-6xl flex-col px-4 sm:px-6 lg:px-8">
       <header className="border-b border-slate-200 py-5 sm:py-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <InternalLink className="group inline-flex items-center gap-3" to="/" onNavigate={navigate}><img src="/coin-mascot.svg" alt="Crypto Invest 로고" className="size-10 shrink-0" /><span className="text-2xl font-bold tracking-tight text-slate-950">{path === '/' ? 'CRYPTO INVEST' : title}</span></InternalLink>
-          <div className="flex items-center gap-3"><InternalLink className="primary-button" to="/account" onNavigate={navigate}>{token ? '마이 페이지' : '로그인 / 회원가입'}</InternalLink>{token && <button className="secondary-button" type="button" onClick={() => { updateToken(null); navigate('/account') }}>로그아웃</button>}</div>
+          <div className="flex flex-wrap items-center justify-end gap-2">{token && remainingSeconds !== null && <span className="text-xs font-semibold tabular-nums text-slate-600" aria-label={'세션 남은 시간 ' + Math.floor(remainingSeconds / 60) + '분 ' + (remainingSeconds % 60) + '초'}>세션 {Math.floor(remainingSeconds / 60)}:{String(remainingSeconds % 60).padStart(2, '0')}</span>}{token && <button className="secondary-button" type="button" disabled={sessionExtending} onClick={() => void extendSession()}>{sessionExtending ? '연장 중…' : '30분 연장'}</button>}<InternalLink className="primary-button" to="/account" onNavigate={navigate}>{token ? '마이 페이지' : '로그인 / 회원가입'}</InternalLink>{token && <button className="secondary-button" type="button" onClick={() => { updateToken(null); navigate('/account') }}>로그아웃</button>}</div>
+          {sessionMessage && <p className="w-full text-right text-xs text-slate-600" role="status">{sessionMessage}</p>}
         </div>
         <p className="mt-3 text-sm text-slate-600">시장과 투자 판단 정보를 한곳에서 확인합니다.</p>
       </header>
       {!nicknameGateActive && <nav className="-mx-1 mt-4 flex gap-1 overflow-x-auto pb-2" aria-label="주요 메뉴">
         {pages.map((page) => <InternalLink className={`shrink-0 rounded-lg px-3 py-2.5 text-sm font-semibold transition-colors ${path === page.path ? 'bg-blue-50 text-blue-800' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-950'}`} key={page.path} to={page.path} onNavigate={navigate} aria-current={path === page.path ? 'page' : undefined}>{page.label}</InternalLink>)}
-        {profile?.role === 'ADMIN' && <InternalLink className="shrink-0 rounded-lg px-3 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100" to="/admin/discussions" onNavigate={navigate}>신고 관리</InternalLink>}
+        {profile?.role === 'ADMIN' && <InternalLink className="shrink-0 rounded-lg px-3 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100" to="/admin" onNavigate={navigate} aria-current={path.startsWith('/admin') ? 'page' : undefined}>관리자</InternalLink>}
       </nav>}
       <main className="flex-1 py-6 sm:py-8" id="main-content">
         {nicknameGateActive ? profileError ? <section className="panel-card mx-auto max-w-lg" role="alert"><h2 className="panel-title">계정 확인이 필요합니다</h2><p className="panel-description">닉네임 상태를 확인하지 못해 다른 기능을 열지 않았습니다. 연결을 확인하거나 다시 로그인해 주세요.</p></section> : profile?.nicknameRequired ? <NicknameEditor token={token!} current={null} required onSaved={(nickname) => setProfile((current) => ({ nickname, nicknameRequired: false, role: current?.role ?? 'USER' }))} /> : <p className="panel-card" role="status">계정 설정을 확인하고 있습니다.</p> : <>
@@ -102,9 +158,11 @@ function App() {
         {path === '/history' && (token ? <PaperAccountSummary token={token} revision={paperRevision} /> : <section className="panel-card"><h2 className="panel-title">로그인이 필요합니다</h2><p className="panel-description">내 모의거래 체결 이력은 로그인 후 확인할 수 있습니다.</p><InternalLink className="primary-button mt-5" to="/account" onNavigate={navigate}>로그인 / 회원가입</InternalLink></section>)}
         {path === '/account' && <div className="space-y-5"><AccountAccess token={token} onTokenChange={updateToken} nickname={profile?.nickname ?? null} onNavigate={navigate} /><ExchangeAccountPanel token={token} /></div>}
         {path === '/account/edit' && (token ? <section className="grid gap-4" aria-labelledby="account-edit-heading"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="eyebrow">마이 페이지</p><h2 className="page-heading" id="account-edit-heading">내 정보 수정</h2></div><button className="secondary-button" type="button" onClick={() => navigate('/account')}>마이 페이지로 돌아가기</button></div><NicknameEditor token={token} current={profile?.nickname ?? null} required={false} onSaved={(nickname) => setProfile((current) => ({ nickname, nicknameRequired: false, role: current?.role ?? 'USER' }))} /><AccountSecuritySettings token={token} /></section> : <section className="panel-card"><h2 className="panel-title">로그인이 필요합니다</h2><InternalLink className="primary-button mt-4" to="/account" onNavigate={navigate}>로그인 / 회원가입</InternalLink></section>)}
-        {path === '/admin/discussions' && profile?.role === 'ADMIN' && <DiscussionModeration token={token!} />}
+        {path === '/admin' && (profile?.role === 'ADMIN' ? <section className="space-y-4" aria-labelledby="admin-heading"><div><p className="eyebrow">운영 도구</p><h2 className="page-heading" id="admin-heading">관리자</h2><p className="panel-description">신고 및 사용자 권한을 관리합니다.</p></div><InternalLink className="panel-card block hover:border-blue-300" to="/admin/discussions" onNavigate={navigate}><h3 className="font-semibold text-slate-950">토론방 신고 관리</h3><p className="mt-1 text-sm text-slate-600">신고 검토, 게시글 숨김 및 복원을 처리합니다.</p></InternalLink><InternalLink className="panel-card block hover:border-blue-300" to="/admin/users" onNavigate={navigate}><h3 className="font-semibold text-slate-950">사용자 권한 관리</h3><p className="mt-1 text-sm text-slate-600">사용자 검색, 관리자 권한 부여·회수와 감사 기록을 확인합니다.</p></InternalLink></section> : <section className="panel-card" role="alert"><h2 className="panel-title">관리자 권한이 필요합니다</h2><p className="panel-description">이 페이지에 접근할 권한이 없습니다.</p></section>)}
+        {path === '/admin/discussions' && (profile?.role === 'ADMIN' ? <DiscussionModeration token={token!} /> : <section className="panel-card" role="alert"><h2 className="panel-title">관리자 권한이 필요합니다</h2><p className="panel-description">이 페이지에 접근할 권한이 없습니다.</p></section>)}
+        {path === '/admin/users' && (profile?.role === 'ADMIN' ? <AdminUserManagement token={token!} /> : <section className="panel-card" role="alert"><h2 className="panel-title">관리자 권한이 필요합니다</h2><p className="panel-description">이 페이지에 접근할 권한이 없습니다.</p></section>)}
         {path === '/privacy' && <PrivacyPolicyPage />}
-        {!current && path !== '/account' && path !== '/account/edit' && path !== '/admin/discussions' && path !== '/privacy' && <section className="panel-card"><h2 className="panel-title">페이지를 찾을 수 없습니다</h2><InternalLink className="primary-button mt-5" to="/" onNavigate={navigate}>대시보드로 이동</InternalLink></section>}
+        {!current && path !== '/account' && path !== '/account/edit' && path !== '/admin' && path !== '/admin/discussions' && path !== '/admin/users' && path !== '/privacy' && <section className="panel-card"><h2 className="panel-title">페이지를 찾을 수 없습니다</h2><InternalLink className="primary-button mt-5" to="/" onNavigate={navigate}>대시보드로 이동</InternalLink></section>}
         </>}
       </main>
       {!nicknameGateActive && <footer className="mt-auto border-t border-slate-200 py-6 text-sm text-slate-600">

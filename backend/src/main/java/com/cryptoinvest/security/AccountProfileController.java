@@ -28,8 +28,14 @@ public class AccountProfileController {
     private static final String NICKNAME_PATTERN = "[A-Za-z0-9가-힣]{2,8}";
     private final UserAuthRepository users;
     private final EmailVerificationService emailVerification;
+    private final AppTokenService tokens;
 
-    public AccountProfileController(UserAuthRepository users, EmailVerificationService emailVerification) { this.users = users; this.emailVerification = emailVerification; }
+    public AccountProfileController(UserAuthRepository users, EmailVerificationService emailVerification, AppTokenService tokens) { this.users = users; this.emailVerification = emailVerification; this.tokens = tokens; }
+
+    @PostMapping("/session/extend")
+    public SessionExtensionResponse extendSession(Authentication authentication) {
+        return new SessionExtensionResponse(tokens.issue((UUID) authentication.getPrincipal()));
+    }
 
     @GetMapping("/profile")
     public Profile profile(Authentication authentication) {
@@ -97,6 +103,7 @@ public class AccountProfileController {
         public Instant availableAt() { return availableAt; }
     }
     public record Profile(String nickname, boolean nicknameRequired, String role) {}
+    public record SessionExtensionResponse(String accessToken) {}
     public record NicknameAvailability(boolean valid, boolean available) {}
 
     public static final class NicknameTakenException extends RuntimeException {}

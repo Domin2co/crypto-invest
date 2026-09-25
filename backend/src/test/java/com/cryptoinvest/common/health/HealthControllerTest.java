@@ -30,3 +30,32 @@ class HealthControllerTest {
                 .andExpect(jsonPath("$.tradingMode").doesNotExist());
     }
 }
+
+
+class PaperLeagueHealthIndicatorTest {
+    @Test
+    void reportsOverdueValuationsForOperationsMonitoring() {
+        var repository = org.mockito.Mockito.mock(com.cryptoinvest.trading.PaperLeagueRepository.class);
+        org.mockito.Mockito.when(repository.overdueStartingSnapshots(
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyBoolean())).thenReturn(1);
+        org.mockito.Mockito.when(repository.overdueFinalSnapshots(org.mockito.ArgumentMatchers.any())).thenReturn(0);
+
+        var health = new PaperLeagueHealthIndicator(repository).health();
+
+        org.assertj.core.api.Assertions.assertThat(health.getStatus())
+                .isEqualTo(org.springframework.boot.actuate.health.Status.DOWN);
+        org.assertj.core.api.Assertions.assertThat(health.getDetails())
+                .containsEntry("pendingOpeningSnapshots", 1);
+    }
+
+    @Test
+    void reportsHealthyWhenNoValuationsAreOverdue() {
+        var repository = org.mockito.Mockito.mock(com.cryptoinvest.trading.PaperLeagueRepository.class);
+        org.mockito.Mockito.when(repository.overdueStartingSnapshots(
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyBoolean())).thenReturn(0);
+        org.mockito.Mockito.when(repository.overdueFinalSnapshots(org.mockito.ArgumentMatchers.any())).thenReturn(0);
+
+        org.assertj.core.api.Assertions.assertThat(new PaperLeagueHealthIndicator(repository).health().getStatus())
+                .isEqualTo(org.springframework.boot.actuate.health.Status.UP);
+    }
+}

@@ -72,8 +72,16 @@ public class EmailVerificationService {
         return token;
     }
 
+    public String confirmPasswordReset(String email, String code, UUID userId) {
+        UUID challengeId = jdbc.query("SELECT challenge_id FROM account_email_verification WHERE LOWER(email) = ? AND purpose = 'PASSWORD_RESET' AND user_id = ? AND expires_at > CURRENT_TIMESTAMP AND consumed_at IS NULL AND verified_token_hash IS NULL ORDER BY created_at DESC LIMIT 1",
+                rs -> rs.next() ? UUID.fromString(rs.getString(1)) : null, email.trim().toLowerCase(java.util.Locale.ROOT), userId);
+        if (challengeId == null) throw new IllegalArgumentException("Invalid or expired verification code");
+        return confirm(challengeId, email, code, "PASSWORD_RESET", userId);
+    }
+
     public void consumeSignup(String email, String token) { consume(email, token, "SIGNUP", null); }
     public void consumeEmailChange(UUID userId, String email, String token) { consume(email, token, "EMAIL_CHANGE", userId); }
+    public void consumePasswordReset(UUID userId, String email, String token) { consume(email, token, "PASSWORD_RESET", userId); }
 
     private void consume(String email, String token, String purpose, UUID userId) {
         int updated = jdbc.update("UPDATE account_email_verification SET consumed_at = CURRENT_TIMESTAMP WHERE LOWER(email) = ? AND purpose = ? AND user_id IS NOT DISTINCT FROM ? AND verified_token_hash = ? AND token_expires_at > CURRENT_TIMESTAMP AND consumed_at IS NULL",

@@ -479,3 +479,104 @@ Browser runtime은 기존 로컬 Vite/Backend 환경에서 통과했다. E2E에�
 | 실제 거래소 LIVE 주문 | 실행 안 함 | NOT EXECUTED | 자동/수동 검증에서 실주문 금지 |
 
 E2E 첫 실행은 8080에서 실행 중이던 이전 Backend가 댓글 페이지 API를 제공하지 않아 실패했다. 기존 개발 서버를 종료하고 `.env`를 프로세스에만 전달해 최신 Backend를 재기동한 후 3건 모두 통과했다. 토큰은 탭의 `sessionStorage`에 보관하며 서버 토큰 만료는 8시간이다. ADMIN 계정 부여는 운영자가 권한 검토 후 수동 수행해야 한다.
+## 2026-09-25 관리자 홈 및 30분 세션 제한
+
+| 검증 | 실제 명령/환경 | 결과 | 범위 |
+| --- | --- | --- | --- |
+| Backend unit | backend: .\gradlew.bat test --tests com.cryptoinvest.security.AppTokenServiceTest --rerun-tasks --console=plain, Java 21 | PASS | 30분 만료 경계와 기존 8시간 토큰 폐기 |
+| Frontend 정적·단위·빌드 | frontend: npm run lint; npm run typecheck; npm run test -- --reporter=dot; npm run build | PASS (9 tests) | 관리자 화면, 남은 세션시간, 세션 연장/만료, 기존 기능 |
+| Browser E2E | e2e: npm run test:e2e, Chromium, PostgreSQL 16/Mailpit | PASS (3 tests) | 메뉴, 320px, 가입·로그인·닉네임 설정·새로고침; LIVE 주문 미호출 |
+| Runtime/API | docker compose up -d; Backend bootRun; GET /api/health; Frontend GET / | PASS | PostgreSQL/Redis/Mailpit 기동, Flyway V24, 8080 UP 및 5173 HTTP 200, 실주문 제출 false |
+| 세션 연장 UI | frontend 단위 테스트 | PASS | 상단 남은 시간 표시, 인증된 연장 요청, 새 토큰 저장, 만료 시 자동 로그아웃 |
+| 세션 연장 API | backend: .\gradlew.bat integrationTest --rerun-tasks --console=plain, PostgreSQL 16 | PASS | 로그인한 사용자 토큰으로 연장, 새 토큰 접근 및 비인증 거부 |
+| ADMIN 신고 권한 API | backend: .\gradlew.bat integrationTest --rerun-tasks --console=plain, PostgreSQL 16 | PASS | ADMIN 검사, 신고 숨김·기각·복원 및 기타 기존 통합 테스트 포함 18건 |
+| 사용자 가이드 PDF | 갱신 스킬의 승인 기록 도구 mark_artifact_operation_started.mjs를 환경에서 찾을 수 없어 실행 안 함 | NOT EXECUTED | Markdown 가이드는 v2.8 및 30분/관리자/연장 안내로 갱신, PDF 재생성·렌더 확인은 미실행 |
+| 실제 거래소 LIVE 주문 | 실행 안 함 | NOT EXECUTED | 실주문 경로는 호출하지 않음 |
+
+## 2026-09-25 관리자 사용자 역할 부여/회수
+
+| 검증 | 실제 명령/환경 | 결과 | 범위 |
+| --- | --- | --- | --- |
+| Backend 단위 | `backend: .\gradlew.bat test --rerun-tasks --console=plain`, Java 21 | PASS | Backend unit suite |
+| Backend PostgreSQL 통합 | `backend: .\gradlew.bat integrationTest --rerun-tasks --console=plain`, PostgreSQL 16 | PASS (20 tests) | Flyway V25, USER/ADMIN 검색·부여·회수, 사유/담당자 감사 기록, 비관리자 거부, 본인 회수 방지, 기존 통합 테스트 |
+| Frontend lint/typecheck/unit/build | `frontend: npm run lint; npm run typecheck; npm run test -- --reporter=dot; npm run build` | PASS (10 tests) | 관리자 사용자 권한 화면 및 기존 UI |
+| Browser E2E | `e2e: npm run test:e2e`, Chromium | PASS (3 tests) | 기존 회원가입/로그인, 메뉴/320px, LIVE 주문 미호출 |
+| Runtime/API | Docker Compose PostgreSQL/Redis/Mailpit healthy, Backend 8080, Frontend 5173 | PASS | Flyway V25 반영, `/api/health` UP, 미인증 관리자 API 401, 프론트 200, 실주문 제출 false |
+| 실제 LIVE 주문 및 실제 ADMIN 계정 권한 변경 | 실행 안 함 | NOT EXECUTED | 실주문 금지; 최초 ADMIN 계정은 운영자가 검토된 절차로 수동 지정해야 함 |
+
+Gradle unit test가 최초 실행에서 신규 Java 파일의 UTF-8 BOM 때문에 컴파일에 실패했다. BOM을 제거하고 전체 단위 및 통합 테스트를 다시 실행해 통과했다. Docker daemon과 Gradle wrapper 다운로드는 sandbox에서 권한/네트워크 차단되어 승인된 로컬 런타임 접근 후 확인했다. 재기동 시 8080 포트가 이미 사용 중이어서 중복 bootRun은 종료됐고, 기존 최신 Backend의 `/api/health`를 확인했다. 운영 서비스에 대한 실제 ADMIN 권한 변경은 실행하지 않았다.
+
+## 2026-09-25 관리자 권한 감사 목록 표시 보완
+
+| 검증 | 실제 명령/환경 | 결과 | 범위 |
+| --- | --- | --- | --- |
+| Backend PostgreSQL 통합 | `backend: .\gradlew.bat integrationTest --tests com.cryptoinvest.security.AdminUserControllerIT --rerun-tasks --console=plain`, PostgreSQL 16 | PASS (2 tests) | 이력 API에서 담당자·대상 라벨 반환 및 역할 부여/회수 감사 |
+| Frontend 정적·단위·빌드 | `frontend: npm run lint; npm run typecheck; npm run test -- --reporter=dot; npm run build` | PASS (10 tests) | 감사 이력의 담당자→대상 라벨 렌더링 포함 |
+| 실제 관리자 권한 변경 | 실행 안 함 | NOT EXECUTED | 실제 계정 역할은 변경하지 않음 |
+
+
+## 2026-09-25 Approved account recovery, league settlement, SMTP setup
+
+| Check | Command/environment | Result | Scope |
+| --- | --- | --- | --- |
+| Backend unit tests | `backend: .\gradlew.bat clean test --rerun-tasks --console=plain`, Java 21 | PASS (67 tests) | Password reset, PAPER boundary retry and pending-snapshot fill guard, existing unit suite |
+| Backend PostgreSQL integration | `backend: .\gradlew.bat integrationTest --rerun-tasks --console=plain`, PostgreSQL 16 | PASS (22 tests) | V26-V29 migrations, one-time email reset token/password update/session revocation, PAPER settlement timestamp, existing integration suite |
+| Frontend static/unit/build | `frontend: npm run lint; npm run typecheck; npm run test -- --reporter=dot; npm run build` | PASS (10 unit tests) | Password reset form and existing frontend |
+| Browser E2E | `e2e: npm run test:e2e`, Chromium, local Mailpit | PASS (3 tests) | New account receives reset code, resets password, confirms old session returns 401, signs in with the new password; existing navigation/mobile/discussion/PAPER flows |
+| Runtime/API | Docker Compose Postgres/Redis/Mailpit healthy; Backend `bootRun`; Frontend 5173 | PASS | Flyway V29 validated, backend `/api/health` 200, unknown-address reset request 202 with generic response, frontend 200, live order submission disabled |
+| Local email delivery | Mailpit at `127.0.0.1:8025` | PASS | Signup/reset code delivery and reset flow verified in E2E |
+| Real provider delivery | Provider account/domain not configured | NOT EXECUTED | Requires provider credentials and sender-domain DNS setup |
+| Actual live order | Not executed | NOT EXECUTED | Automated and manual live orders remain out of scope |
+
+The first integration attempt exposed an invalid non-Korean database comment and a Flyway checksum mismatch after editing already-applied migrations. V26/V27 were restored to their applied contents; the comment correction was moved to additive V28. The complete integration suite then passed and the running backend validated all 28 migrations without repair.
+
+
+## 2026-09-25 Settlement observability and operations runbooks
+
+| Check | Command/environment | Result | Scope |
+| --- | --- | --- | --- |
+| Backend unit tests | backend: .\gradlew.bat clean test --rerun-tasks --console=plain, Java 21 | PASS (69 tests) | PAPER overdue-snapshot health indicator and existing unit suite |
+| Backend PostgreSQL integration | backend: .\gradlew.bat integrationTest --rerun-tasks --console=plain, PostgreSQL 16 | PASS (23 tests) | PostgreSQL 16 migration and settlement-gap query integration coverage |
+| Backup/restore exercise | scripts/backup/verify-postgres-backup.ps1 | NOT EXECUTED | Docker Engine access was denied; script is ready for an operator-approved local Compose run |
+| Runtime health endpoint | Updated backend bootRun on port 8081; GET /actuator/health and GET /api/health | PASS | PostgreSQL 16 connected, Flyway V29 current, paperLeague component UP, health details hidden, live order submission disabled; temporary backend stopped after verification |
+| PowerShell script parse | PowerShell parser check | PASS | Script parses without running Docker or creating a backup |
+| Live trading | Not run | NOT EXECUTED | No live order or credential operation performed |
+
+The recovery rule is intentionally fail-closed: if a valuation cannot be captured in the first-day recovery window, the entry remains unranked and is not reconstructed from later prices. External alert delivery, production backup retention, and legal/privacy approval require operator and service-owner configuration.
+
+## 2026-09-25 Authentication abuse protection
+
+| Check | Command/environment | Result | Scope |
+| --- | --- | --- | --- |
+| Backend unit | `backend: .\gradlew.bat clean test --rerun-tasks --console=plain`, Java 21 | PASS (69 tests) | Existing backend unit suite and AuthController limiter wiring |
+| Backend PostgreSQL integration | `backend: .\gradlew.bat integrationTest --rerun-tasks --console=plain`, PostgreSQL 16 | PASS (24 tests) | V30 schema, HMAC-only email/IP keys, 429 threshold and fixed-window reset |
+| Runtime/API | Backend `bootRun` on port 8081, `GET /actuator/health`, repeated `POST /api/auth/login` | PASS | Health UP, Flyway V30 validated, login abuse reaches HTTP 429 at the configured threshold; temporary backend stopped |
+| Frontend/E2E | Not run | NOT EXECUTED | Backend authentication API only; no UI changes |
+| Live trading | Not run | NOT EXECUTED | No order API or credentials used |
+
+Runtime probing found Spring default error dispatch converted the limit response to 401. A dedicated safe ResponseEntity handler now preserves the status: final direct HTTP verification returned health 200 and login 429 with `RATE_LIMITED`. No valid account or trading endpoint was used.
+
+## 2026-09-25 remaining priority work: MFA and trusted proxy handling
+
+| Verification | Command/environment | Result | Coverage |
+| --- | --- | --- | --- |
+| Backend unit | `backend: .\gradlew.bat test --rerun-tasks --console=plain` (JDK 21) | PASS (72 tests) | Auth, trusted proxy CIDR/IP-chain parsing, RFC 6238 TOTP vector, existing unit suite |
+| PostgreSQL integration | `backend: .\gradlew.bat integrationTest --rerun-tasks --console=plain`, `POSTGRES_PASSWORD` loaded from local `.env` into process only | PASS (25 tests) | Flyway V1–V32, auth rate limits, MFA encrypted secret, MFA login requirement, TOTP replay rejection, one-use recovery code and disable flow |
+| Frontend lint/typecheck/test/build | `frontend: npm run lint`, `npm run typecheck`, `npm run test`, `npm run build` | PASS (10 frontend tests) | Login MFA challenge and account security settings compile and existing UI tests pass |
+| Browser E2E | `e2e: npm run test:e2e` | PASS (3 tests) | Signup/login, navigation, privacy footer, 320px mobile layout; no live-order route invoked |
+| MFA browser journey | No MFA-specific Playwright scenario yet | NOT EXECUTED | Service/integration login and recovery behavior is covered; enrollment/login steps and secret/recovery-code display need a dedicated browser test |
+| Runtime | `docker compose ps`; backend `bootRun --args='--server.port=8081'`; GET `/actuator/health`; unauthenticated GET `/api/account/mfa` | PASS | PostgreSQL/Redis/Mailpit containers were already healthy; migration version 32 validated; health returned UP; MFA API returned expected 401 without credentials; temporary backend on 8081 was stopped after check |
+| Diff hygiene | `git diff --check` | PASS | No whitespace errors |
+
+The first integration run exposed missing Korean comments on new TOTP columns. The already-applied V31 migration was restored unchanged and the comments were moved into V32; the full integration suite passed after that correction. External SMTP delivery, alert-channel delivery, encrypted off-host restore exercise, production proxy CIDRs, passkey origin/RP ID, and designated privacy/legal approval remain NOT EXECUTED because they require deployment credentials, an operator-approved storage/channel, or an accountable reviewer.
+## 2026-09-25 Recommendation Engine Phase 1 — domain model and persistence
+
+| Verification | Command/environment | Result | Coverage |
+| --- | --- | --- | --- |
+| Backend unit | `backend: .\gradlew.bat test --rerun-tasks --console=plain` (JDK 21) | PASS (75 tests) | Signed score/confidence bounds, available metric provenance requirements, immutable factor collections, existing backend unit suite |
+| PostgreSQL integration | `backend: .\gradlew.bat integrationTest --rerun-tasks --console=plain`, local `.env` DB password in process environment | PASS (26 tests) | V33 snapshot migration, score/rating constraints, schema comment completeness, existing PostgreSQL suite |
+| Runtime | `backend: .\gradlew.bat bootRun --args='--server.port=8081'`; GET `/actuator/health` | PASS | PostgreSQL connected and all reported health components UP; temporary backend stopped after verification |
+| Frontend / Browser | Not required; no API/UI behavior changed | NOT EXECUTED | Existing legacy recommendation UI and API intentionally remain unchanged during Phase 1 |
+| Diff hygiene | `git diff --check` | PASS | No whitespace errors |
+
+Phase 1 is complete. Phases 2–8 remain queued in `docs/TODO.md`; no recommendation score, signal, portfolio action, or order path changed in this phase.

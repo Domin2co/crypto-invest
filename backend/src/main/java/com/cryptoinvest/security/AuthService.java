@@ -10,9 +10,11 @@ public class AuthService {
     private final UserAuthRepository users;
     private final UserConsentRepository consents;
     private final AppTokenService tokens;
+    private final EmailVerificationService emailVerification;
+    private final TotpMfaService mfa;
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
-    public AuthService(UserAuthRepository users, UserConsentRepository consents, AppTokenService tokens) {
-        this.users = users; this.consents = consents; this.tokens = tokens;
+    public AuthService(UserAuthRepository users, UserConsentRepository consents, AppTokenService tokens, EmailVerificationService emailVerification, TotpMfaService mfa) {
+        this.users = users; this.consents = consents; this.tokens = tokens; this.emailVerification = emailVerification; this.mfa = mfa;
     }
     @Transactional
     public String register(String email, String password, boolean privacyAccepted, boolean marketingAccepted, String policyVersion) {
@@ -28,9 +30,31 @@ public class AuthService {
                 .orElseThrow(() -> new IllegalArgumentException("Invalid credentials"));
         users.updatePassword(user.id(), passwordEncoder.encode(newPassword));
     }
+    @Transactional
+    public void resetPassword(java.util.UUID userId, String email, String verificationToken, String newPassword) {
+        emailVerification.consumePasswordReset(userId, email, verificationToken);
+        users.updatePassword(userId, passwordEncoder.encode(newPassword));
+        users.revokeAuthTokens(userId);
+    }
     public String login(String email, String password) {
+        LoginResult result = login(email, password, null);
+        if (result.mfaRequired()) throw new IllegalArgumentException("Authenticator code required");
+        return result.accessToken();
+    }
+
+    public LoginResult login(String email, String password, String secondFactorCode) {
         var user = users.findEnabledByEmail(email).filter(value -> passwordEncoder.matches(password, value.passwordHash()))
                 .orElseThrow(() -> new IllegalArgumentException("Invalid credentials"));
-        return tokens.issue(user.id());
+        if (mfa.isEnabled(user.id())) {
+            if (secondFactorCode == null || secondFactorCode.isBlank()) return new LoginResult(null, true);
+            if (!mfa.verify(user.id(), secondFactorCode)) throw new IllegalArgumentException("Invalid credentials");
+        }
+        return new LoginResult(tokens.issue(user.id()), false);
     }
+
+    public boolean verifyCurrentPassword(java.util.UUID userId, String password) {
+        return users.findEnabledById(userId).filter(value -> passwordEncoder.matches(password, value.passwordHash())).isPresent();
+    }
+
+    public record LoginResult(String accessToken, boolean mfaRequired) {}
 }

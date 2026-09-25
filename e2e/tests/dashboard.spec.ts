@@ -141,8 +141,8 @@ test('registers and logs into a real test account without calling a live-order r
   const findMessage = async () => {
     const mailbox = await page.request.get('http://127.0.0.1:8025/api/v1/messages?limit=100')
     expect(mailbox.ok()).toBeTruthy()
-    const summaries = (await mailbox.json()).messages as Array<{ ID: string; To: Array<{ Address: string }> }>
-    return summaries.find((item) => item.To.some((recipient) => recipient.Address.toLowerCase() === email.toLowerCase()))
+    const summaries = (await mailbox.json()).messages as Array<{ ID: string; Created: string; To: Array<{ Address: string }> }>
+    return summaries.filter((item) => item.To.some((recipient) => recipient.Address.toLowerCase() === email.toLowerCase())).sort((left, right) => Date.parse(right.Created) - Date.parse(left.Created))[0]
   }
   await expect.poll(findMessage, { timeout: 10_000 }).toBeDefined()
   const message = await findMessage()
@@ -160,7 +160,7 @@ test('registers and logs into a real test account without calling a live-order r
     page.getByRole('button', { name: '회원가입' }).click(),
   ])
   expect(registration.status()).toBe(200)
-  const accessToken = (await registration.json()).accessToken as string
+  let accessToken = (await registration.json()).accessToken as string
   const nickname = `P${Date.now().toString().slice(-7)}`
   await expect(page.getByRole('dialog', { name: '사용할 닉네임을 정해 주세요' })).toBeVisible()
   await expect(page.getByRole('navigation', { name: '주요 메뉴' })).toHaveCount(0)
@@ -184,12 +184,30 @@ test('registers and logs into a real test account without calling a live-order r
   await page.getByRole('tab', { name: '로그인' }).click()
   await page.getByLabel('이메일').fill(email)
   await page.locator('input[name="password"]').fill('Good-pass1!')
+  await page.getByRole('button', { name: '\uBE44\uBC00\uBC88\uD638\uB97C \uC78A\uC73C\uC168\uB098\uC694?' }).click()
+  const previousMail = await findMessage()
+  await page.getByRole('button', { name: '\uC778\uC99D \uCF54\uB4DC \uBC1B\uAE30' }).click()
+  await expect.poll(async () => (await findMessage())?.ID, { timeout: 10_000 }).not.toBe(previousMail?.ID)
+  const resetMessage = await findMessage()
+  const resetEmailMessage = await page.request.get(`http://127.0.0.1:8025/api/v1/message/${resetMessage!.ID}`)
+  const resetCode = ((await resetEmailMessage.json()).Text as string).match(/\uC778\uC99D \uCF54\uB4DC: (\d{6})/)?.[1]
+  expect(resetCode).toBeTruthy()
+  await page.getByLabel('\uC774\uBA54\uC77C \uC778\uC99D \uCF54\uB4DC').fill(resetCode!)
+  await page.getByRole('button', { name: '\uCF54\uB4DC \uD655\uC778' }).click()
+  await page.locator('input[name="newPassword"]').fill('Reset-pass2!')
+  await page.getByRole('button', { name: '\uBE44\uBC00\uBC88\uD638 \uBCC0\uACBD' }).click()
+  await expect(page.getByText('Password updated. Please sign in.')).toBeVisible()
+  const revokedSessionStatus = await page.evaluate(async (token) => (await fetch('/api/account/profile', { headers: { Authorization: `Bearer ${token}` } })).status, accessToken)
+  expect(revokedSessionStatus).toBe(401)
+  await page.locator('input[name="email"]').fill(email)
+  await page.locator('input[name="password"]').fill('Reset-pass2!')
   const [login] = await Promise.all([
     page.waitForResponse((response) => response.url().includes('/api/auth/login')),
     page.getByRole('button', { name: '로그인' }).click(),
   ])
   expect(login.status()).toBe(200)
   await expect(page.getByRole('heading', { name: '내 자산과 시장을 차분히 살펴보세요' })).toBeVisible()
+  accessToken = (await login.json()).accessToken as string
   await page.reload()
   await expect(page.getByRole('heading', { name: '내 자산과 시장을 차분히 살펴보세요' })).toBeVisible()
   await page.getByRole('link', { name: '마이 페이지' }).click()

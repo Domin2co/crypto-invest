@@ -36,6 +36,28 @@ class FlywayPaperTradingIT {
     @Autowired PlatformTransactionManager transactionManager;
 
     @Test
+    void detectsPastMonthSettlementGapsAndOnlyFlagsCurrentOpeningAfterRecoveryWindow() {
+        YearMonth month = YearMonth.now(PaperLeagueService.ZONE);
+        UUID oldOpening = UUID.randomUUID();
+        UUID oldClosing = UUID.randomUUID();
+        UUID currentOpening = UUID.randomUUID();
+        UUID futureOpening = UUID.randomUUID();
+        for (UUID userId : List.of(oldOpening, oldClosing, currentOpening, futureOpening)) {
+            jdbcTemplate.update("INSERT INTO app_user (id, email, password_hash) VALUES (?, ?, 'hash')",
+                    userId, userId + "@example.com");
+        }
+        paperLeague.enroll(oldOpening, month.minusMonths(1));
+        paperLeague.enroll(oldClosing, month.minusMonths(1));
+        paperLeague.enroll(currentOpening, month);
+        paperLeague.enroll(futureOpening, month.plusMonths(1));
+        paperLeague.setStartingValue(oldClosing, month.minusMonths(1), BigDecimal.ONE, java.time.Instant.now());
+
+        assertThat(paperLeague.overdueStartingSnapshots(month, false)).isEqualTo(1);
+        assertThat(paperLeague.overdueStartingSnapshots(month, true)).isEqualTo(2);
+        assertThat(paperLeague.overdueFinalSnapshots(month)).isEqualTo(1);
+    }
+
+    @Test
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     void monthlyBoundaryLockSerializesInstancesPerMonthAndOperation() {
         YearMonth month = YearMonth.of(2026, 10);
@@ -101,6 +123,31 @@ class FlywayPaperTradingIT {
                 """, String.class);
         assertThat(schemaComments).isNotEmpty().allSatisfy(comment ->
                 assertThat(comment).isNotBlank().containsPattern("[가-힣]"));
+    }
+
+    @Test
+    void persistsRecommendationSnapshotAndEnforcesSignedScoreBounds() {
+        UUID snapshotId = UUID.randomUUID();
+        jdbcTemplate.update("""
+                INSERT INTO recommendation_evaluation_snapshot
+                    (id, exchange, market, rule_version, market_regime, market_regime_score,
+                     asset_score, confidence_score, rating, evaluated_at)
+                VALUES (?, 'UPBIT', 'KRW-BTC', 'rules-v1', 'RISK_OFF', -70, -60, 35,
+                        'STRONG_REDUCE', CURRENT_TIMESTAMP)
+                """, snapshotId);
+        assertThat(jdbcTemplate.queryForObject("SELECT asset_score FROM recommendation_evaluation_snapshot WHERE id = ?", Short.class, snapshotId))
+                .isEqualTo((short) -60);
+        assertThat(jdbcTemplate.queryForObject("SELECT indicator_values::text FROM recommendation_evaluation_snapshot WHERE id = ?", String.class, snapshotId))
+                .isEqualTo("{}");
+
+        assertThatThrownBy(() -> jdbcTemplate.update("""
+                INSERT INTO recommendation_evaluation_snapshot
+                    (id, exchange, market, rule_version, market_regime, market_regime_score,
+                     asset_score, confidence_score, rating, evaluated_at)
+                VALUES (?, 'UPBIT', 'KRW-BTC', 'rules-v1', 'NEUTRAL', 0, 101, 35,
+                        'STRONG_BUY', CURRENT_TIMESTAMP)
+                """, UUID.randomUUID()))
+                .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
     }
 
     @Test
@@ -175,6 +222,28 @@ class FlywayPaperTradingIT {
         }
     }
     @Test
+    void participantPaperFillsWaitUntilOpeningValuationSnapshotIsStored() {
+        UUID userId = UUID.randomUUID();
+        String key = "opening-snapshot-" + UUID.randomUUID();
+        jdbcTemplate.update("INSERT INTO app_user (id, email, password_hash, nickname) VALUES (?, ?, 'hash', 'SnapUser')", userId, userId + "@example.com");
+        consents.grant(userId, "PAPER_LEADERBOARD", "test-v1");
+        YearMonth month = paperLeagueService.currentMonth();
+        paperLeague.enroll(userId, month);
+        UUID planId = UUID.randomUUID();
+        jdbcTemplate.update("INSERT INTO order_plan (id, user_id, exchange, symbol, side, order_type, requested_amount, status, idempotency_key) VALUES (?, ?, 'UPBIT', 'BTC', 'BUY', 'MARKET', 10000, 'ACCEPTED', ?)", planId, userId, key);
+        OrderPlan plan = new OrderPlan(userId, Exchange.UPBIT, "BTC", "BUY", new BigDecimal("10000"), BigDecimal.ZERO, key);
+        RiskPolicy policy = new RiskPolicy(false, BigDecimal.ONE, new BigDecimal("20000"), BigDecimal.ONE);
+
+        assertThat(paperLeague.hasPendingStart(userId, month)).isTrue();
+        assertThatThrownBy(() -> paperTrading.execute(planId, plan, new BigDecimal("1000"), null, BigDecimal.ZERO, policy))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Monthly PAPER league start valuation is pending");
+        paperLeague.setStartingValue(userId, month, new BigDecimal("2000000"), java.time.Instant.now());
+        assertThat(paperLeague.hasPendingStart(userId, month)).isFalse();
+        assertThat(paperTrading.execute(planId, plan, new BigDecimal("1000"), null, BigDecimal.ZERO, policy).status()).isEqualTo("FILLED");
+    }
+
+    @Test
     void closesMonthlyLeagueWithKrwPaperWalletsAndAwardsOnlyTopThree() {
         YearMonth month = paperLeagueService.currentMonth().minusMonths(1);
         UUID[] users = new UUID[4];
@@ -197,6 +266,7 @@ class FlywayPaperTradingIT {
         paperLeagueService.closeMonth(month);
         var board = paperLeagueService.board(month);
         assertThat(board.status()).isEqualTo("CLOSED");
+        assertThat(board.marketDataAt()).isNotNull();
         assertThat(board.standings()).extracting(PaperLeagueService.Standing::nickname).containsExactly("LeagueA", "LeagueB", "LeagueC", "LeagueD");
         assertThat(board.standings()).extracting(PaperLeagueService.Standing::place).containsExactly(1, 2, 3, 4);
         assertThat(board.standings()).extracting(PaperLeagueService.Standing::badge).containsExactly("GOLD", "SILVER", "BRONZE", null);

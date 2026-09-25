@@ -11,6 +11,7 @@
 - 사용자별 AES-256-GCM 암호화 거래소 API 키와 BCrypt 비밀번호
 - 모의거래: 거래소별 전체 KRW 종목, 실시간 공개 WebSocket 시세·체결·호가, 매수·매도·간편·호가 주문, 가상 지갑 및 체결 이력
 - 개인정보 필수/선택 동의, 마케팅 철회, 본인 정보 열람 및 계정 익명화
+- 암호화된 TOTP 다중 인증, 일회용 복구 코드, 로그인·인증 설정의 DB 기반 이메일/IP 요청 제한
 - LIVE 안전 경계: 기본 잠금, 이중 스위치, 일일 한도, RiskEngine, 사용자 재확인, idempotent 상태 복구, 호가 IOC 지정가 지원
 - 회원가입 후 필수 고유 닉네임 설정·중복확인과 계정에서 닉네임 변경, 미설정 사용자 API 차단
 - 메뉴별 독립 경로, 모든 화면의 개인정보 footer, 320px 모바일 내비게이션과 Playwright E2E
@@ -33,6 +34,7 @@ crypto-invest/
 ├── .env.example
 ├── .codex/config.toml                # 프로젝트 전용 도구 설정
 ├── docker-compose.yml                 # PostgreSQL, Redis, 로컬 전용 Mailpit
+├── scripts/backup/verify-postgres-backup.ps1 # Creates a PostgreSQL backup and verifies isolated restore
 ├── docs/                             # 요구사항, 설계, 보안, 운영 및 로컬 기능 테스트 가이드
 ├── output/pdf/crypto-invest-local-testing-guide.pdf # 로컬 기능 테스트 가이드
 ├── backend/
@@ -44,7 +46,7 @@ crypto-invest/
 │       │   ├── indicator/ recommendation/ portfolio/ risk/
 │       │   ├── security/             # 인증, 동의, 개인정보 권리
 │       │   └── trading/              # 모의거래 및 LIVE 안전 경계
-│       ├── main/resources/db/migration/ # V1~V24 Flyway, COMMENT와 제약으로 DB 구조·토론방 게시 형식·댓글·평가 관리
+│       ├── main/resources/db/migration/ # V1~V33 Flyway, COMMENT와 제약으로 DB 구조·토론방 게시 형식·댓글·평가 관리
 │       └── test/java/                # 단위 및 PostgreSQL 통합 테스트
 ├── frontend/
 │   ├── public/coin-mascot.svg          # 프로젝트 시그니처 로고 및 favicon
@@ -131,3 +133,9 @@ New accounts require a one-time email code before registration. The code and its
 
 
 종목별 토론방은 10개씩 페이지를 나누고 상세 글, 첨부 이미지, 댓글, 추천/비추천 및 21개 초과 비추천 블라인드를 제공합니다. 계정 보안 정보는 마이 페이지의 별도 수정 화면에서 관리합니다. 고양이와 코인 SVG 시그니처는 브라우저 아이콘과 상단 로고에 공통 사용합니다.
+
+
+관리자 역할 변경 감사는 Flyway `V25__admin_role_change_audit.sql`에서 생성하며, 초기 관리자 프로비저닝은 검토된 운영 절차가 필요합니다.
+
+
+Password reset verifies the mailbox with a one-time email code, applies the same password policy as signup, and revokes all previously issued bearer sessions. Monthly PAPER valuations store the quote capture time and pause participant fills until the opening snapshot is recorded.

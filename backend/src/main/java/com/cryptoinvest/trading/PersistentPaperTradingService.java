@@ -14,12 +14,14 @@ import org.springframework.transaction.annotation.Transactional;
 public class PersistentPaperTradingService {
     private final PaperWalletRepository walletRepository;
     private final PaperOrderAuditRepository orderRepository;
+    private final PaperLeagueRepository league;
     private final BigDecimal initialKrw;
 
     public PersistentPaperTradingService(PaperWalletRepository walletRepository, PaperOrderAuditRepository orderRepository,
-            @Value("${app.paper-initial-krw:1000000}") BigDecimal initialKrw) {
+            PaperLeagueRepository league, @Value("${app.paper-initial-krw:1000000}") BigDecimal initialKrw) {
         this.walletRepository = walletRepository;
         this.orderRepository = orderRepository;
+        this.league = league;
         this.initialKrw = initialKrw;
     }
 
@@ -37,6 +39,9 @@ public class PersistentPaperTradingService {
             BigDecimal sellQuantity, BigDecimal feeRate, RiskPolicy policy, String orderType, BigDecimal limitPrice) {
         var existing = orderRepository.findByUserAndIdempotencyKey(plan.userId(), plan.idempotencyKey());
         if (existing.isPresent()) return existing.get();
+        if (league.hasPendingStart(plan.userId(), java.time.YearMonth.now(PaperLeagueService.ZONE))) {
+            throw new IllegalStateException("Monthly PAPER league start valuation is pending");
+        }
         String reason = RiskEngine.rejectReason(plan, policy);
         if (reason != null) throw new IllegalStateException("Paper order rejected: " + reason);
         if (price == null || price.signum() <= 0 || feeRate == null || feeRate.signum() < 0) throw new IllegalArgumentException("Invalid paper price or fee");

@@ -70,6 +70,7 @@ public class PaperLeagueService {
         } else {
             List<PaperLeagueRepository.Entry> entries = league.findForMonth(month);
             standings = entries.stream().filter(e -> e.place() != null).map(e -> new Standing(e.nickname(), e.returnPercent(), e.tradeCount(), e.place(), e.badge())).toList();
+            capturedAt = entries.stream().map(PaperLeagueRepository.Entry::finalCapturedAt).filter(java.util.Objects::nonNull).min(Instant::compareTo).orElse(null);
             status = standings.isEmpty() ? "WAITING" : "CLOSED";
         }
         YearMonth latest = league.latestCompletedMonth();
@@ -84,8 +85,8 @@ public class PaperLeagueService {
         List<UUID> pending = league.pendingStarts(month);
         if (pending.isEmpty()) return;
         for (UUID userId : pending) for (Exchange exchange : Exchange.values()) wallets.initializeKrw(userId, exchange, initialKrw);
-        Map<UUID, BigDecimal> values = values(pending).values();
-        pending.forEach(userId -> league.setStartingValue(userId, month, values.get(userId)));
+        Valuations valuation = values(pending);
+        pending.forEach(userId -> league.setStartingValue(userId, month, valuation.values().get(userId), valuation.capturedAt()));
     }
 
     @Transactional
@@ -94,12 +95,13 @@ public class PaperLeagueService {
         List<UUID> pending = league.pendingFinals(month);
         if (pending.isEmpty()) return;
         List<PaperLeagueRepository.Entry> entries = league.findForMonth(month).stream().filter(e -> pending.contains(e.userId())).toList();
-        Map<UUID, BigDecimal> values = values(pending).values();
+        Valuations valuation = values(pending);
+        Map<UUID, BigDecimal> values = valuation.values();
         for (PaperLeagueRepository.Entry entry : entries) {
             BigDecimal value = values.getOrDefault(entry.userId(), BigDecimal.ZERO);
             BigDecimal starting = entry.startingValue();
             BigDecimal result = starting.signum() == 0 ? BigDecimal.ZERO : value.subtract(starting).multiply(ONE_HUNDRED).divide(starting, 8, RoundingMode.HALF_UP);
-            league.setFinalValue(entry.userId(), month, value, result, entry.tradeCount());
+            league.setFinalValue(entry.userId(), month, value, result, entry.tradeCount(), valuation.capturedAt());
         }
         List<Standing> ranked = rank(league.findForMonth(month).stream().filter(e -> e.tradeCount() > 0)
                 .map(e -> new Standing(e.nickname(), e.returnPercent(), e.tradeCount(), null, null)).toList());
@@ -140,7 +142,7 @@ public class PaperLeagueService {
             BigDecimal value = wallet.currency().equals("KRW") ? wallet.amount() : wallet.amount().multiply(prices.get(new QuoteKey(wallet.exchange(), wallet.currency())));
             totals.compute(wallet.userId(), (id, total) -> total.add(value));
         }
-        return new Valuations(totals, capturedAt);
+        return new Valuations(totals, capturedAt == null ? Instant.now() : capturedAt);
     }
 
     private static Standing standing(PaperLeagueRepository.Entry entry, BigDecimal value) {
