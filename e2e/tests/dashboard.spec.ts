@@ -360,3 +360,17 @@ test('registers and logs into a real test account without calling a live-order r
   })).status, accessToken)
   expect(cleanupStatus).toBe(204)
 })
+
+test('recommendation page explains score, confidence, regime and unavailable metrics', async ({ page }) => {
+  await page.route('**/api/recommendations/UPBIT?market=KRW-BTC', (route) => route.fulfill({ json: {
+    recommendation: { symbol: 'KRW-BTC', score: 50, signal: 'HOLD', targetWeight: 0, reasons: [] },
+    generatedAt: '2026-09-26T00:00:00Z', dataCapturedAt: '2026-09-25T00:00:00Z', dataSource: 'UPBIT public daily candles', candleCount: 121,
+    indicators: { rsi: 54, momentum: 100, volatilityPercent: 2 }, limitations: ['미확보 데이터 제외'],
+    evaluation: { ruleVersion: 'rules-1.0', score: 52, confidence: 79, rating: 'BUY', marketRegime: { regime: 'RISK_ON' },
+      factors: [{ code: 'MVRV', explanation: 'MVRV 데이터 미확보', points: 0, dataStatus: 'UNAVAILABLE' }], metrics: {} },
+  } }))
+  await page.goto('/recommendations')
+  await expect(page.getByText('BUY · +52점 · 신뢰도 79%')).toBeVisible()
+  await expect(page.getByText('시장 상태: RISK_ON')).toBeVisible()
+  await expect(page.getByText(/MVRV 데이터 미확보/)).toBeVisible()
+})

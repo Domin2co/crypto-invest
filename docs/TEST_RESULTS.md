@@ -580,3 +580,55 @@ The first integration run exposed missing Korean comments on new TOTP columns. T
 | Diff hygiene | `git diff --check` | PASS | No whitespace errors |
 
 Phase 1 is complete. Phases 2–8 remain queued in `docs/TODO.md`; no recommendation score, signal, portfolio action, or order path changed in this phase.
+## 2026-09-26 Recommendation Engine computational core (partial)
+
+| Check | Command/environment | Result | Scope |
+| --- | --- | --- | --- |
+| Backend targeted unit tests | `backend: .\\gradlew.bat test --tests com.cryptoinvest.indicator.IndicatorEngineTest --tests com.cryptoinvest.recommendation.MultiFactorRecommendationEngineTest --tests com.cryptoinvest.recommendation.PortfolioRecommendationEngineTest --console=plain`, Java 21 | PASS | EMA/MACD/ATR, signed weighted score, metric profile, portfolio cash-floor sizing, no-lookahead forward return |
+| Backend static compilation | same Gradle test task | PASS | Changed backend classes and targeted tests compile |
+| Runtime/API/Browser | Updated in 2026-09-26 verification below | PASS | Signed score API/UI connected; external source coverage and persistence remain TODO |
+| Full backend/integration suite | Not run | NOT EXECUTED | Only affected targeted unit tests were run |
+
+At the initial computational-core checkpoint, a UTF-8 BOM was removed from a test file and targeted tests passed. Later API/runtime verification is recorded below.
+## 2026-09-26 Recommendation API integration update
+
+| Check | Command/environment | Result | Scope |
+| --- | --- | --- | --- |
+| Backend targeted tests | backend Gradle test task for IndicatorEngineTest, MultiFactorRecommendationEngineTest, PortfolioRecommendationEngineTest and RecommendationServiceTest; Java 21 | PASS | Indicator calculations, missing-metric status, signed score, portfolio sizing and service evaluation |
+| Frontend checks | `npm run lint; npm run typecheck; npm run test -- --reporter=dot; npm run build` | PASS (10 tests) | Recommendation panel and existing UI |
+| E2E | `npm run test:e2e`, Chromium | PASS (3 tests) | Existing navigation/mobile/signup/login, no live order endpoint called |
+| Runtime | Docker Compose Postgres/Redis/Mailpit healthy; backend local 8080 | PASS | Flyway V33 validated; `/api/health` UP; recommendation API returned 200 with `rules-1.0`, signed score 52, confidence 48 capped by 48% data coverage, BTC regime RISK_ON and SMA120 available; unavailable MVRV explicitly marked |
+| Backend process | temporary `bootRun` on port 8080 | STOPPED | Stopped after verification |
+| Full Postgres integration suite | Not run | NOT EXECUTED | No migration was added by this pass |
+| Backtest persistence/portfolio account API/browser recommendation assertion | Not run | NOT EXECUTED | Pure portfolio and forward-return helpers exist, but snapshot writing/outcome updates and account-specific sizing are not connected |
+| Live order | Not called | NOT EXECUTED | Recommendation does not invoke the order path |
+
+E2E initially failed because backend port 8080 was not running. After starting the local backend, all three E2E checks passed. An initial runtime command lacked PowerShell `-UseBasicParsing`; the repeated health and recommendation API requests succeeded.
+## 2026-09-26 Recommendation Engine verification update
+
+| Check | Command/environment | Result | Scope |
+| --- | --- | --- | --- |
+| Full Backend unit suite | `backend: .\\gradlew.bat clean test --rerun-tasks --console=plain`, Java 21 | PASS (78 tests, 0 failures) | All backend unit tests including 121-day evaluation and new recommendation logic |
+| PostgreSQL integration | `backend: .\\gradlew.bat integrationTest --tests com.cryptoinvest.trading.FlywayPaperTradingIT --rerun-tasks --console=plain`, PostgreSQL 16 | PASS (9 tests, 0 failures) | V33 recommendation snapshot schema constraints and existing Flyway/Paper integration checks |
+| Frontend | `npm run lint; npm run typecheck; npm run test -- --reporter=dot; npm run build` | PASS (10 tests) | Recommendation evaluation UI |
+| Browser E2E | `npm run test:e2e`, Chromium | PASS (4 tests) | Added signed score/confidence/regime/missing metric rendering assertion; no live order calls |
+| Runtime recommendation API | backend `bootRun`, GET `/api/recommendations/UPBIT?market=KRW-BTC` | PASS (200) | `rules-1.0`, signed score, confidence, `RISK_ON`, SMA120 available and MVRV unavailable; API used public candles |
+| Runtime shutdown | Temporary backend on port 8080 | PASS | Stopped after E2E/API verification; Docker Compose data services left running |
+| Full recommendation persistence/outcome pipeline | Not implemented | NOT EXECUTED | V33 table exists, but API does not yet save snapshots or fill 7/30-day returns |
+| User-specific portfolio recommendation endpoint | Not implemented | NOT EXECUTED | Pure sizing helper exists; holdings, targets, correlations and volatility are not wired into an authenticated response |
+| Third-party free data providers | Not connected | NOT EXECUTED | Fear & Greed, market cap/dominance, derivatives, ETF flow and chain metrics remain unavailable at runtime |
+## 2026-09-26 Recommendation Engine integrated implementation verification
+
+| Verification | Command/environment | Result | Coverage |
+| --- | --- | --- | --- |
+| Backend unit | `backend: .\gradlew.bat clean test --rerun-tasks --console=plain`, JDK 21 | PASS (79 tests, 0 failures) | Existing unit tests plus indicator, score/confidence, outlier and portfolio sizing boundary tests |
+| PostgreSQL integration | `backend: .\gradlew.bat integrationTest --rerun-tasks --console=plain`, local PostgreSQL 16 and project `.env` process-only password | PASS (26 tests, 0 failures) | Full current DB integration suite including V33 snapshot schema |
+| Frontend lint/typecheck/test/build | `frontend: npm run lint; npm run typecheck; npm run test -- --reporter=dot; npm run build` | PASS (10 frontend tests) | Recommendation and portfolio proposal UI compile and existing tests pass |
+| Browser E2E | `e2e: npm run test:e2e`, Chromium | PASS (4 tests) | Navigation/privacy/mobile/signup/login/recommendation rendering; no live order endpoint invoked |
+| Runtime health / recommendation | Local backend on 8080; GET `/actuator/health`, `/api/recommendations/UPBIT?market=KRW-BTC`, `/api/recommendations/backtest?days=30` | PASS | Health 200, recommendation 200 with `rules-1.0`, score/regime and live public metric observations; backtest endpoint 200 with 0 matured groups |
+| Snapshot persistence | Read-only PostgreSQL count after recommendation requests | PASS | One UPBIT KRW-BTC V33 snapshot recorded; repeated request did not break hourly deduplication |
+| Portfolio authorization | Unauthenticated GET `/api/portfolio/UPBIT/recommendations?market=KRW-BTC` | PASS | Returned 401 as required |
+| Diff hygiene / Serena diagnostics | `git diff --check`; Serena diagnostics for changed Java sources | PASS | No whitespace errors; no reported source diagnostics |
+| Authenticated portfolio proposal in browser | No dedicated E2E account-with-exchange-balance scenario | NOT EXECUTED | API route is protected (401 verified); positive response depends on a test exchange credential/balance and was not exercised |
+
+An initial E2E run before starting the backend failed all four tests at setup with `ECONNREFUSED 127.0.0.1:8080`; after starting the local backend, all four passed. The temporary backend on 8080 was stopped after checks. PostgreSQL/Redis/Mailpit containers were left in their pre-existing running state. No order endpoint was called.

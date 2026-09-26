@@ -16,8 +16,15 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/recommendations")
 public class RecommendationController {
     private final RecommendationService recommendationService;
+    private final RecommendationSnapshotRepository snapshots;
 
-    public RecommendationController(RecommendationService recommendationService) { this.recommendationService = recommendationService; }
+    public RecommendationController(RecommendationService recommendationService, RecommendationSnapshotRepository snapshots) { this.recommendationService = recommendationService; this.snapshots = snapshots; }
+
+    @GetMapping("/backtest")
+    public BacktestView backtest(@RequestParam @Pattern(regexp = "7|30") String days) {
+        return new BacktestView(Integer.parseInt(days), snapshots.backtest(Integer.parseInt(days)), "Historical observed returns only; excludes fees, slippage and survivorship bias.");
+    }
+    public record BacktestView(int days, java.util.List<RecommendationSnapshotRepository.BacktestGroup> groups, String limitations) {}
 
     @GetMapping("/{exchange}")
     public RecommendationService.RecommendationView recommend(@PathVariable Exchange exchange,

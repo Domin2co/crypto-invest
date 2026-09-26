@@ -9,6 +9,7 @@ type Portfolio = {
   capturedAt: string
   positions: { currency: string; quantity: number; averageBuyPrice: number; currentPrice: number; evaluatedAmount: number; weight: number; targetWeight: number | null; rebalancingGap: number | null }[]
 }
+type Proposal = { market: string; assetScore: number; confidence: number; action: string; suggestedAmount: number | null; explanations: string[]; correlations: Record<string, number>; factors: { code: string; points: number; dataStatus: string }[] }
 type Props = { token: string | null }
 const krw = (value: number) => `${Math.round(value).toLocaleString('ko-KR')} KRW`
 
@@ -26,6 +27,7 @@ export default function PortfolioPanel({ token }: Props) {
     },
   })
   const portfolio = query.data
+  const proposalQuery = useQuery({ queryKey: ['portfolio-recommendation', token], enabled: !!token, retry: false, queryFn: async () => { const response = await fetch('/api/portfolio/UPBIT/recommendations?market=KRW-BTC', { headers: { Authorization: `Bearer ${token}` } }); if (!response.ok) throw new Error('proposal'); return response.json() as Promise<Proposal> } })
 
   async function saveTargets(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -47,6 +49,8 @@ export default function PortfolioPanel({ token }: Props) {
     {!token && <p className="mt-4 rounded-lg bg-white p-4 text-sm text-slate-600">로그인하고 거래소 읽기 전용 연동을 저장한 뒤 조회할 수 있습니다.</p>}
     {query.isFetching && <p className="mt-4 text-sm text-slate-600" role="status">포트폴리오를 불러오는 중입니다.</p>}
     {query.isError && <p className="mt-4 rounded-lg bg-amber-50 p-4 text-sm text-amber-900" role="status">포트폴리오를 불러오지 못했습니다. 거래소 연동과 자산 조회 권한을 확인해 주세요.</p>}
+    {proposalQuery.data && <article className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4" aria-label="Portfolio recommendation"><h3 className="font-bold text-slate-900">{proposalQuery.data.market} · {proposalQuery.data.action}</h3><p className="mt-1 text-sm text-slate-700">Score {proposalQuery.data.assetScore} · confidence {proposalQuery.data.confidence}%{proposalQuery.data.suggestedAmount !== null && ` · suggested value ${krw(Math.abs(proposalQuery.data.suggestedAmount))}`}</p><ul className="mt-2 list-disc pl-5 text-sm text-slate-700">{proposalQuery.data.explanations.map((reason) => <li key={reason}>{reason}</li>)}</ul><p className="mt-2 text-xs text-slate-600">30-day return correlation: {Object.entries(proposalQuery.data.correlations).map(([coin, value]) => `${coin} ${(value * 100).toFixed(0)}%`).join(", ") || "insufficient shared history"}</p></article>}
+    {proposalQuery.isError && token && <p className="mt-3 text-sm text-amber-900" role="status">Portfolio recommendation is currently unavailable.</p>}
     {portfolio && <><div className="mt-4 grid gap-4 md:grid-cols-3" aria-label="포트폴리오 요약"><Summary title="총 평가 자산" value={krw(portfolio.totalEvaluatedAmount)} /><Summary title="현금 비중" value={`${(portfolio.cashWeight * 100).toFixed(1)}%`} /><Summary title="조회 거래소" value={portfolio.exchange} /></div>
       <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{portfolio.positions.map((position) => <article className="rounded-xl border border-slate-200 bg-white p-4" key={position.currency}><h3 className="font-bold text-slate-950">{position.currency}</h3><p className="mt-2 text-sm text-slate-700">평가액 {krw(position.evaluatedAmount)} · 현재 비중 {(position.weight * 100).toFixed(1)}%</p><p className="mt-1 text-xs text-slate-500">수량 {position.quantity} · 현재가 {krw(position.currentPrice)}{position.rebalancingGap !== null && ` · 조정 차이 ${(position.rebalancingGap * 100).toFixed(1)}%`}</p></article>)}</div>
       <form className="mt-5 rounded-xl border border-slate-200 bg-white p-4" onSubmit={saveTargets}><h3 className="font-bold text-slate-950">목표 비중</h3><p className="mt-1 text-sm text-slate-600">합계는 100% 이하여야 하며, 저장해도 주문은 실행되지 않습니다.</p><div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{portfolio.positions.map((position) => <label className="grid gap-1 text-sm" key={position.currency}>{position.currency} 목표 비중 (0~1)<input className="rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-slate-950" defaultValue={position.targetWeight ?? 0} max="1" min="0" name={`target-${position.currency}`} required step="0.01" type="number" /></label>)}</div><button className="mt-4 rounded-lg border border-blue-600 px-4 py-2 text-sm font-bold text-blue-700" type="submit">목표 비중 저장</button>{targetMessage && <p className="mt-3 text-sm text-blue-700" role="status">{targetMessage}</p>}</form>

@@ -56,6 +56,16 @@ app:
   privacy-policy-version: ${PRIVACY_POLICY_VERSION:2026-09-21}
   paper-league-consent-version: ${PAPER_LEAGUE_CONSENT_VERSION:2026-09-24}
 
+recommendation:
+  sources:
+    coingecko-demo-api-key: ${COINGECKO_DEMO_API_KEY:}
+  portfolio:
+    btc-max: ${RECOMMENDATION_BTC_MAX:0.55}
+    eth-max: ${RECOMMENDATION_ETH_MAX:0.30}
+    major-alt-max: ${RECOMMENDATION_MAJOR_ALT_MAX:0.15}
+    high-risk-alt-max: ${RECOMMENDATION_HIGH_RISK_ALT_MAX:0.05}
+    total-alt-max: ${RECOMMENDATION_TOTAL_ALT_MAX:0.35}
+    cash-min: ${RECOMMENDATION_CASH_MIN:0.10}
 management:
   endpoints:
     web:
